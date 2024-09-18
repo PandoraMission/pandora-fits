@@ -1,4 +1,6 @@
 sandbox
+~$*.xlsx
+
 # Mac things
 .DS_Store
 
