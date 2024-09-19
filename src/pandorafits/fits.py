@@ -142,14 +142,14 @@ class PandoraHDUList(fits.HDUList, FITSHandlerMixins):
         fits.HDUList(self).writeto(*args, **kwargs)
 
 
-class NIRDA0HDUList(PandoraHDUList):
+class NIRDALevel0HDUList(PandoraHDUList):
     """NIRDA Level 0 File Type"""
 
     def __init__(self, file=None):
         """
         This class will read a file passed to it using astropy fits.
         After loading it will validate that the file is compliant with
-        the NIRDA Level 0 file standards specified in the `fileformats`
+        the NIRDA Level 0 file standards specified in the `formats`
         folder. This object subclasses the fits.HDUList object, and
         maintains all its class methods.
 
@@ -159,54 +159,54 @@ class NIRDA0HDUList(PandoraHDUList):
             The file to load
         """
         self.header_formats = [
-            pd.read_excel(FORMATSDIR + "nirda-headers-level0.xlsx", idx)
+            pd.read_excel(FORMATSDIR + "nirda/level0-headers.xlsx", idx)
             for idx in range(2)
         ]
         self.extension_types = pd.read_excel(
-            FORMATSDIR + "nirda-extension-types-level0.xlsx"
+            FORMATSDIR + "nirda/level0-extension-types.xlsx"
         )
         super().__init__(file=file)
 
 
-class NIRDA2HDUList(PandoraHDUList):
+class NIRDALevel2HDUList(PandoraHDUList):
     def __init__(self, file=None):
         self.header_formats = [
-            pd.read_excel(FORMATSDIR + "nirda-headers-level2.xlsx", idx)
-            for idx in range(6)
+            pd.read_excel(FORMATSDIR + "nirda/level2-headers.xlsx", idx)
+            for idx in range(7)
         ]
         self.extension_types = pd.read_excel(
-            FORMATSDIR + "nirda-extension-types-level2.xlsx"
+            FORMATSDIR + "nirda/level2-extension-types.xlsx"
         )
         super().__init__(file=file)
 
 
-class VISDA0HDUList(PandoraHDUList):
+class VISDALevel0HDUList(PandoraHDUList):
     def __init__(self, file=None):
         self.header_formats = [
-            pd.read_excel(FORMATSDIR + "visda-headers-level0.xlsx", idx)
+            pd.read_excel(FORMATSDIR + "visda/level0-headers.xlsx", idx)
             for idx in range(3)
         ]
         self.extension_types = pd.read_excel(
-            FORMATSDIR + "visda-extension-types-level0.xlsx"
+            FORMATSDIR + "visda/level0-extension-types.xlsx"
         )
         super().__init__(file=file)
 
 
-class VISDA2HDUList(PandoraHDUList):
+class VISDALevel2HDUList(PandoraHDUList):
     def __init__(self, file=None, nROIs: int = 9):
         self.header_formats = [
-            pd.read_excel(FORMATSDIR + "visda-headers-level2.xlsx", 0),
+            pd.read_excel(FORMATSDIR + "visda/level2-headers.xlsx", 0),
             *[
-                pd.read_excel(FORMATSDIR + "visda-headers-level2.xlsx", 1)
+                pd.read_excel(FORMATSDIR + "visda/level2-headers.xlsx", 1)
                 for _ in range(1, nROIs + 1)
             ],
             *[
-                pd.read_excel(FORMATSDIR + "visda-headers-level2.xlsx", idx)
+                pd.read_excel(FORMATSDIR + "visda/level2-headers.xlsx", idx)
                 for idx in range(2, 5)
             ],
         ]
         self.extension_types = pd.read_excel(
-            FORMATSDIR + "visda-extension-types-level2.xlsx"
+            FORMATSDIR + "visda/level2-extension-types.xlsx"
         )
         self.header_formats[1].loc[
             self.header_formats[1].Name == "EXTNAME", "Value"
