@@ -1,4 +1,5 @@
-![PyPI](https://img.shields.io/pypi/v/pandorafits)
+[![pypi-badge](https://img.shields.io/pypi/v/pandorafits.svg?color=blue)](https://pypi.python.org/pypi/pandorafits)
+<a href="https://github.com/pandoramission/pandora-fits/actions/workflows/tests.yml"><img src="https://github.com/pandoramission/pandora-fits/workflows/pytest/badge.svg" alt="Test status"/></a>
 
 # `pandora-fits`
 
