@@ -277,7 +277,7 @@ class Level3HDUList(PandoraHDUList):
     def __init__(self, file=None):
         self.header_formats = [
             pd.read_excel(FORMATSDIR + "level3/level3-headers.xlsx", idx)
-            for idx in range(8)
+            for idx in range(6)
         ]
         self.extension_types = pd.read_excel(
             FORMATSDIR + "level3/level3-extension-types.xlsx"
