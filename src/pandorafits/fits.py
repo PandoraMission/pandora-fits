@@ -168,6 +168,19 @@ class NIRDALevel0HDUList(PandoraHDUList):
         super().__init__(file=file)
 
 
+class NIRDALevel1HDUList(PandoraHDUList):   #### Note: LINDSEY ADDED 
+
+    def __init__(self, file=None):
+        self.header_formats = [
+            pd.read_excel(FORMATSDIR + "nirda/level1-headers.xlsx", idx)
+            for idx in range(2)
+        ]
+        self.extension_types = pd.read_excel(
+            FORMATSDIR + "nirda/level1-extension-types.xlsx"
+        )
+        super().__init__(file=file)
+
+
 class NIRDALevel2HDUList(PandoraHDUList):
     def __init__(self, file=None):
         self.header_formats = [
@@ -188,6 +201,18 @@ class VISDALevel0HDUList(PandoraHDUList):
         ]
         self.extension_types = pd.read_excel(
             FORMATSDIR + "visda/level0-extension-types.xlsx"
+        )
+        super().__init__(file=file)
+
+
+class VISDALevel1HDUList(PandoraHDUList):   #### Note: LINDSEY ADDED  
+    def __init__(self, file=None):
+        self.header_formats = [
+            pd.read_excel(FORMATSDIR + "visda/level1-headers.xlsx", idx)
+            for idx in range(3)
+        ]
+        self.extension_types = pd.read_excel(
+            FORMATSDIR + "visda/level1-extension-types.xlsx"
         )
         super().__init__(file=file)
 
@@ -216,3 +241,46 @@ class VISDALevel2HDUList(PandoraHDUList):
                 self.header_formats[1].Name == "EXTNAME", "Value"
             ] = f"STAR{idx - 1:03}"
         super().__init__(file=file)
+
+
+class EngineeringLevel0HDUList(PandoraHDUList):   #### Note: LINDSEY ADDED 
+    """Engineering Level 0 File Type"""
+
+    def __init__(self, file=None):
+        self.header_formats = [
+            pd.read_excel(FORMATSDIR + "engineering/level0-headers.xlsx", idx)
+            for idx in range(8)
+        ]
+        self.extension_types = pd.read_excel(
+            FORMATSDIR + "engineering/level0-extension-types.xlsx"
+        )
+        super().__init__(file=file)
+
+
+class EngineeringLevel1HDUList(PandoraHDUList):  #### Note: LINDSEY ADDED 
+    """Engineering Level 1 File Type"""
+
+    def __init__(self, file=None):
+        self.header_formats = [
+            pd.read_excel(FORMATSDIR + "engineering/level1-headers.xlsx", idx)
+            for idx in range(8)
+        ]
+        self.extension_types = pd.read_excel(
+            FORMATSDIR + "engineering/level1-extension-types.xlsx"
+        )
+        super().__init__(file=file)
+
+
+class Level3HDUList(PandoraHDUList):   #### Note: LINDSEY ADDED 
+    """Level 3 File Type"""
+
+    def __init__(self, file=None):
+        self.header_formats = [
+            pd.read_excel(FORMATSDIR + "level3/level3-headers.xlsx", idx)
+            for idx in range(8)
+        ]
+        self.extension_types = pd.read_excel(
+            FORMATSDIR + "level3/level3-extension-types.xlsx"
+        )
+        super().__init__(file=file)
+
