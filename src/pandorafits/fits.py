@@ -168,7 +168,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
         super().__init__(file=file)
 
 
-class NIRDALevel1HDUList(PandoraHDUList): 
+class NIRDALevel1HDUList(PandoraHDUList):
 
     def __init__(self, file=None):
         self.header_formats = [
@@ -205,7 +205,7 @@ class VISDALevel0HDUList(PandoraHDUList):
         super().__init__(file=file)
 
 
-class VISDALevel1HDUList(PandoraHDUList):  
+class VISDALevel1HDUList(PandoraHDUList):
     def __init__(self, file=None):
         self.header_formats = [
             pd.read_excel(FORMATSDIR + "visda/level1-headers.xlsx", idx)
@@ -243,7 +243,7 @@ class VISDALevel2HDUList(PandoraHDUList):
         super().__init__(file=file)
 
 
-class EngineeringLevel0HDUList(PandoraHDUList): 
+class EngineeringLevel0HDUList(PandoraHDUList):
     """Engineering Level 0 File Type"""
 
     def __init__(self, file=None):
@@ -271,7 +271,7 @@ class EngineeringLevel1HDUList(PandoraHDUList):
         super().__init__(file=file)
 
 
-class Level3HDUList(PandoraHDUList): 
+class Level3HDUList(PandoraHDUList):
     """Level 3 File Type"""
 
     def __init__(self, file=None):
