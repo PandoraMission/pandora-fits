@@ -1,10 +1,17 @@
 """Class to handle Pandora fits files"""
 
-from . import logger
-from . import BITPIX_DICT, FORMATSDIR
 import numpy as np
-from astropy.io import fits
 import pandas as pd
+from astropy.io import fits
+
+from . import FORMATSDIR, logger
+from .utils import BITPIX_DICT, generate_random_table_values
+
+__all__ = [
+    "PandoraHDUList",
+    "EngineeringLevel0HDUList",
+    "Level3HDUList",
+]
 
 
 class FITSTemplateException(Exception):
@@ -24,16 +31,31 @@ class FITSValueException(Exception):
 class FITSHandlerMixins(object):
     """Mixins to verify fits objects have the expected formats"""
 
-    def _get_expected_cards(self, index):
+    def _get_dummy_cards(self, index):
+        return [
+            fits.Card(d.iloc[0], d.iloc[1] if d.iloc[1] != "" else d.iloc[2], d.iloc[3])
+            for _, d in self.header_formats[index].fillna("").iterrows()
+        ]
+
+    def _get_mandetory_cards(self, index):
+        return [
+            fits.Card(d.iloc[0], d.iloc[1], d.iloc[3])
+            for _, d in self.header_formats[index].fillna("").iterrows()
+        ]
+
         return [
             fits.Card(*d.fillna("").values)
             for _, d in self.header_formats[index].iterrows()
         ]
 
-    def _get_dummy_hdus(self):
+    def _get_dummy_hdus(self, extensions=None):
         hdulist = []
-        for idx, d in self.extension_types.iterrows():
-            cards = self._get_expected_cards(idx)
+        if extensions is None:
+            k = np.ones(len(self.extension_types), bool)
+        else:
+            k = np.in1d(np.arange(len(self.extension_types)), extensions)
+        for idx, d in self.extension_types[k].iterrows():
+            cards = self._get_dummy_cards(idx)
             hdr = fits.Header(cards)
             data = None
             if d.Type == "PrimaryHDU":
@@ -45,31 +67,41 @@ class FITSHandlerMixins(object):
                         for naxis in np.arange(1, hdr["NAXIS"] + 1)[::-1]
                     ]
                 )
-                data = np.ones(shape, dtype=BITPIX_DICT[hdr["BITPIX"]])
+                if "BSCALE" in hdr:
+                    if (hdr["BSCALE"] == 1) and (hdr["BZERO"] == 2**31):
+                        data = np.ones(shape, dtype=np.uint32)
+                    else:
+                        raise FITSValueException("Can not parse data type")
+                else:
+                    data = np.ones(shape, dtype=BITPIX_DICT[hdr["BITPIX"]][0])
                 hdu = fits.ImageHDU(header=hdr, data=data)
             elif d.Type == "TableHDU":
                 ncolumns = len(
                     [c.keyword for c in cards if c.keyword.startswith("TTYPE")]
                 )
-                coldefs = fits.ColDefs(
-                    [
-                        fits.Column(
-                            name=hdr[f"TTYPE{idx}"],
-                            format=hdr[f"TFORM{idx}"],
-                            unit=f"TUNIT{idx}",
+                columns = [
+                    fits.Column(
+                        name=hdr[f"TTYPE{idx}"],
+                        format=hdr[f"TFORM{idx}"],
+                        unit=hdr[f"TUNIT{idx}"] if f"TUNIT{idx}" in hdr else "",
+                        array=generate_random_table_values(
+                            hdr[f"TFORM{idx}"], hdr["NAXIS2"]
                         )
-                        for idx in np.arange(1, ncolumns + 1)
-                    ]
-                )
-                hdu = fits.TableHDU.from_columns(coldefs, header=hdr)
+                        if hdr["NAXIS2"] != ""
+                        else None,
+                    )
+                    for idx in np.arange(1, ncolumns + 1)
+                ]
+
+                hdu = fits.TableHDU.from_columns(columns, header=hdr)
             hdulist.append(hdu)
         return hdulist
 
     def _validate_ext_types(self):
         """Validate that the extensions have the correct types, e.g. ImageHDU, TableHDU, etc"""
-        if not len(self) == self.nextension:
+        if not len(self) >= self.nmin_extension:
             raise FITSTemplateException(
-                f"Expected {self.nextension} extensions, got {len(self)}."
+                f"Expected {self.nmin_extension} extensions at minimum, got {len(self)}."
             )
         for hdu, expected_type in zip(self, self.extension_types.Type.values):
             if not isinstance(hdu, getattr(fits, expected_type)):
@@ -81,25 +113,33 @@ class FITSHandlerMixins(object):
         """Validate the extensions have the right header keywords"""
         for idx, hdu in enumerate(self):
             hdr = hdu.header
-            expected_header = fits.Header(self._get_expected_cards(idx))
+            expected_header = fits.Header(self._get_mandetory_cards(idx))
             for key in expected_header:
+                if hdr[key] in ["TRUE", "True", "T"]:
+                    hdr[key] = True
+                if hdr[key] in ["FALSE", "False", "F"]:
+                    hdr[key] = False
+                if expected_header[key] in ["TRUE", "True", "T"]:
+                    expected_header[key] = True
+                if expected_header[key] in ["FALSE", "False", "F"]:
+                    expected_header[key] = False
                 if not (key in hdr):
                     logger.warning(f"Key {key} expected, but not found.")
                     continue
-                if expected_header[key] in ["", None, np.nan]:
+                if hdr[key] in ["", None, np.nan]:
                     logger.warning(f"{key} header key missing from ext {idx}.")
-                else:
+                if expected_header[key] not in ["", None, np.nan]:
                     if hdr[key] != expected_header[key]:
-                        if key not in [
-                            "NAXIS1",
-                            "NAXIS2",
-                            "NAXIS3",
-                            "NAXIS4",
-                            "NAXIS5",
-                        ]:
-                            FITSValueException(
-                                f"{key} expected to have value of {expected_header[key]}, but has value {hdr[key]}."
-                            )
+                        if isinstance(expected_header[key], bool):
+                            continue
+                        raise FITSValueException(
+                            f"{key} expected to have value of {expected_header[key]}, but has value {hdr[key]}."
+                        )
+            for key in hdr:
+                if key not in expected_header:
+                    raise FITSTemplateException(
+                        f"{key} is not an expected header value."
+                    )
 
     def _validate_data(self):
         """Check the data in the fits file is all the right dtype, given expected `bitpix`"""
@@ -107,12 +147,25 @@ class FITSHandlerMixins(object):
             if hdu.header["EXTNAME"] == "PRIMARY":
                 continue
             if isinstance(hdu, fits.ImageHDU):
-                expected_header = fits.Header(self._get_expected_cards(idx))
-                expected_type = BITPIX_DICT[expected_header["bitpix"]]
+                expected_header = fits.Header(self._get_mandetory_cards(idx))
+                expected_type, expected_type_str = BITPIX_DICT[
+                    expected_header["bitpix"]
+                ]
                 if not hdu.data.dtype == expected_type:
-                    raise FITSTemplateException(
-                        f"Expected data of type {expected_type}, got {hdu.data.dtype}"
-                    )
+                    if expected_header["bitpix"] == 32:
+                        if not (hdu.header["BSCALE"] == 1) & (
+                            hdu.header["BZERO"] == 2**31
+                        ):
+                            raise FITSTemplateException(
+                                f"Expected data type of np.uint32, got {hdu.data.dtype}"
+                            )
+                    else:
+                        raise FITSTemplateException(
+                            f"Expected data of type {expected_type} ({expected_type_str}), got {hdu.data.dtype}"
+                        )
+
+    def _validate_optional_extensions(self):
+        """Some extensions appear to be optional. So that we have data uniformity, we'll create dummy versions of optional extensions."""
 
     def validate(self):
         """Validate all aspects of the file"""
@@ -131,7 +184,14 @@ class PandoraHDUList(fits.HDUList, FITSHandlerMixins):
             super().__init__(fits.open(file))
         elif isinstance(file, fits.HDUList):
             super().__init__(file)
+        self.nmin_extension = (~self.extension_types.Optional.values).sum()
         self.nextension = len(self.header_formats)
+        self.extnames = np.asarray(
+            [
+                h["Fixed Value"][h.Name.isin(["EXTNAME"])].values[0]
+                for h in self.header_formats
+            ]
+        )
         self.validate()
 
     def writeto(self, *args, **kwargs):
@@ -140,107 +200,6 @@ class PandoraHDUList(fits.HDUList, FITSHandlerMixins):
         Here we will add in some functionality to add in keywords on write that express the history somehow, and check the file names?
         """
         fits.HDUList(self).writeto(*args, **kwargs)
-
-
-class NIRDALevel0HDUList(PandoraHDUList):
-    """NIRDA Level 0 File Type"""
-
-    def __init__(self, file=None):
-        """
-        This class will read a file passed to it using astropy fits.
-        After loading it will validate that the file is compliant with
-        the NIRDA Level 0 file standards specified in the `formats`
-        folder. This object subclasses the fits.HDUList object, and
-        maintains all its class methods.
-
-        Parameters:
-        -----------
-        file: None, str, fits.HDUList
-            The file to load
-        """
-        self.header_formats = [
-            pd.read_excel(FORMATSDIR + "nirda/level0-headers.xlsx", idx)
-            for idx in range(2)
-        ]
-        self.extension_types = pd.read_excel(
-            FORMATSDIR + "nirda/level0-extension-types.xlsx"
-        )
-        super().__init__(file=file)
-
-
-class NIRDALevel1HDUList(PandoraHDUList):
-
-    def __init__(self, file=None):
-        self.header_formats = [
-            pd.read_excel(FORMATSDIR + "nirda/level1-headers.xlsx", idx)
-            for idx in range(2)
-        ]
-        self.extension_types = pd.read_excel(
-            FORMATSDIR + "nirda/level1-extension-types.xlsx"
-        )
-        super().__init__(file=file)
-
-
-class NIRDALevel2HDUList(PandoraHDUList):
-    def __init__(self, file=None):
-        self.header_formats = [
-            pd.read_excel(FORMATSDIR + "nirda/level2-headers.xlsx", idx)
-            for idx in range(7)
-        ]
-        self.extension_types = pd.read_excel(
-            FORMATSDIR + "nirda/level2-extension-types.xlsx"
-        )
-        super().__init__(file=file)
-
-
-class VISDALevel0HDUList(PandoraHDUList):
-    def __init__(self, file=None):
-        self.header_formats = [
-            pd.read_excel(FORMATSDIR + "visda/level0-headers.xlsx", idx)
-            for idx in range(3)
-        ]
-        self.extension_types = pd.read_excel(
-            FORMATSDIR + "visda/level0-extension-types.xlsx"
-        )
-        super().__init__(file=file)
-
-
-class VISDALevel1HDUList(PandoraHDUList):
-    def __init__(self, file=None):
-        self.header_formats = [
-            pd.read_excel(FORMATSDIR + "visda/level1-headers.xlsx", idx)
-            for idx in range(3)
-        ]
-        self.extension_types = pd.read_excel(
-            FORMATSDIR + "visda/level1-extension-types.xlsx"
-        )
-        super().__init__(file=file)
-
-
-class VISDALevel2HDUList(PandoraHDUList):
-    def __init__(self, file=None, nROIs: int = 9):
-        self.header_formats = [
-            pd.read_excel(FORMATSDIR + "visda/level2-headers.xlsx", 0),
-            *[
-                pd.read_excel(FORMATSDIR + "visda/level2-headers.xlsx", 1)
-                for _ in range(1, nROIs + 1)
-            ],
-            *[
-                pd.read_excel(FORMATSDIR + "visda/level2-headers.xlsx", idx)
-                for idx in range(2, 5)
-            ],
-        ]
-        self.extension_types = pd.read_excel(
-            FORMATSDIR + "visda/level2-extension-types.xlsx"
-        )
-        self.header_formats[1].loc[
-            self.header_formats[1].Name == "EXTNAME", "Value"
-        ] = "TARGET"
-        for idx in np.arange(2, nROIs + 2):
-            self.header_formats[idx].loc[
-                self.header_formats[1].Name == "EXTNAME", "Value"
-            ] = f"STAR{idx - 1:03}"
-        super().__init__(file=file)
 
 
 class EngineeringLevel0HDUList(PandoraHDUList):
@@ -253,20 +212,6 @@ class EngineeringLevel0HDUList(PandoraHDUList):
         ]
         self.extension_types = pd.read_excel(
             FORMATSDIR + "engineering/level0-extension-types.xlsx"
-        )
-        super().__init__(file=file)
-
-
-class EngineeringLevel1HDUList(PandoraHDUList):
-    """Engineering Level 1 File Type"""
-
-    def __init__(self, file=None):
-        self.header_formats = [
-            pd.read_excel(FORMATSDIR + "engineering/level1-headers.xlsx", idx)
-            for idx in range(8)
-        ]
-        self.extension_types = pd.read_excel(
-            FORMATSDIR + "engineering/level1-extension-types.xlsx"
         )
         super().__init__(file=file)
 
