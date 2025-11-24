@@ -21,6 +21,7 @@ optional = true
 pytest = ">=7.0.0"
 black = "^25.11.0"
 jupyterlab = "^4.5.0"
+flake8 = "^7.3.0"
 
 
 [build-system]
