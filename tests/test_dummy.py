@@ -1,11 +1,6 @@
-from pandorafits.fits import (
-    NIRDALevel0HDUList,
-    NIRDALevel2HDUList,
-    VISDALevel0HDUList,
-    VISDALevel2HDUList,
-)
-from pandorafits import PACKAGEDIR
-from pandorafits import logger
+from pandorafits import PACKAGEDIR, logger
+from pandorafits.nirda import NIRDAFFILevel0HDUList, NIRDALevel0HDUList
+from pandorafits.visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
 
 TESTDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/tests/"
 
@@ -19,11 +14,11 @@ def test_create_dummy_data_N0():
     logger.setLevel(level)
 
 
-def test_create_dummy_data_N2():
+def test_create_dummy_data_NFFI1():
     level = logger.level
     logger.setLevel("ERROR")
-    NIRDALevel2HDUList().writeto(
-        f"{TESTDIR}dummyfiles/nirda-level2.fits", overwrite=True
+    NIRDAFFILevel0HDUList().writeto(
+        f"{TESTDIR}dummyfiles/nirda-level1.fits", overwrite=True
     )
     logger.setLevel(level)
 
@@ -37,10 +32,10 @@ def test_create_dummy_data_V0():
     logger.setLevel(level)
 
 
-def test_create_dummy_data_V2():
+def test_create_dummy_data_V1():
     level = logger.level
     logger.setLevel("ERROR")
-    VISDALevel2HDUList().writeto(
-        f"{TESTDIR}dummyfiles/visda-level2.fits", overwrite=True
+    VISDAFFILevel0HDUList().writeto(
+        f"{TESTDIR}dummyfiles/visda-level1.fits", overwrite=True
     )
     logger.setLevel(level)

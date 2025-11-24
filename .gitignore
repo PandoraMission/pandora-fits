@@ -1,5 +1,7 @@
 sandbox
+llnl/
 ~$*.xlsx
+trash/
 
 # Mac things
 .DS_Store
