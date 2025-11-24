@@ -1,7 +1,11 @@
-import numpy as np
 import random
 import string
 from typing import List
+
+import numpy as np
+import openpyxl
+import pandas as pd
+from astropy.io import fits
 
 BITPIX_DICT = {
     8: (">u1", "Unsigned 8-bit integer, big-endian"),
@@ -65,3 +69,57 @@ def generate_random_table_values(format_code: str, nvalues: int) -> List:
 
     else:
         raise ValueError("Unsupported format code")
+
+
+def get_excel_sheet(fname, extno=0):
+    wb = openpyxl.load_workbook(fname, data_only=False)
+    ws = wb.worksheets[extno]
+
+    rows = []
+    for row in ws.iter_rows(values_only=False):
+        rows.append(
+            [
+                cell.value
+                if cell.data_type != "n"
+                else cell.number_format and cell._value
+                for cell in row
+            ]
+        )
+
+    df = pd.DataFrame(rows)
+    df.columns = df.loc[0]
+    df = df[1:].reset_index(drop=True)
+    df = df[~df.apply(lambda row: row.isnull().all(), axis=1)].reset_index(drop=True)
+    return df
+
+
+def hdulist_to_excel(hdulist, filename="output.xlsx"):
+    if isinstance(hdulist, str):
+        hdulist = fits.open(hdulist)
+
+    sheet_names = ["Primary", *[f"Ext{idx}" for idx in np.arange(1, len(hdulist))]]
+    dfs = pd.DataFrame(
+        [
+            np.asarray([hdu.header["EXTNAME"] for hdu in hdulist]),
+            np.asarray([type(hdu).__name__ for hdu in hdulist]),
+            np.zeros(len(hdulist), bool),
+        ]
+    ).T
+    dfs.columns = ["Extension", "Type", "Optional"]
+    dfs = [
+        dfs,
+        *[
+            pd.DataFrame(
+                np.asarray([np.asarray(card) for card in hdu.header.cards]),
+                columns=["Name", "Example Value", "Comment"],
+            )
+            for hdu in hdulist
+        ],
+    ]
+    with pd.ExcelWriter(filename, engine="openpyxl") as writer:
+        dfs[0].to_excel(writer, sheet_name="Structure", index=False)
+        for name, df in zip(sheet_names, dfs[1:]):
+            df["Fixed Value"] = None
+            df[["Name", "Fixed Value", "Example Value", "Comment"]].to_excel(
+                writer, sheet_name=name, index=False
+            )
