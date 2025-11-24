@@ -1,16 +1,8 @@
 import os
 
 from pandorafits import PACKAGEDIR, logger
-from pandorafits.fits import (
-    EngineeringLevel0HDUList,
-    Level3HDUList,
-    NIRDALevel0HDUList,
-    NIRDALevel1HDUList,
-    NIRDALevel2HDUList,
-    VISDALevel0HDUList,
-    VISDALevel1HDUList,
-    VISDALevel2HDUList,
-)
+from pandorafits.nirda import NIRDAFFILevel0HDUList, NIRDALevel0HDUList
+from pandorafits.visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
 
 TESTDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/tests/"
 
@@ -20,13 +12,9 @@ def test_roundtrip():
     logger.setLevel("ERROR")
     for HDUList in [
         NIRDALevel0HDUList,
-        NIRDALevel1HDUList,
-        NIRDALevel2HDUList,
         VISDALevel0HDUList,
-        VISDALevel1HDUList,
-        VISDALevel2HDUList,
-        EngineeringLevel0HDUList,
-        Level3HDUList,
+        NIRDAFFILevel0HDUList,
+        VISDAFFILevel0HDUList,
     ]:
         dummy_hdulist = HDUList()
         dummy_hdulist.writeto("test.fits", overwrite=True)

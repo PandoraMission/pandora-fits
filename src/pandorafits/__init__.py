@@ -15,5 +15,5 @@ NIRDAReference = pr.NIRDAReference()
 VISDAReference = pr.VISDAReference()
 
 
-from .nirda import *
-from .visda import *
+from .nirda import *  # noqa
+from .visda import *  # noqa

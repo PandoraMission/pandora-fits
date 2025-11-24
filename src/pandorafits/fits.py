@@ -1,7 +1,6 @@
 """Class to handle Pandora fits files"""
 
 import numpy as np
-import pandas as pd
 
 # import pandas as pd
 from astropy.io import fits
@@ -111,11 +110,13 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                             int(hdu.header["BZERO"]) == 2**31
                         ):
                             raise FITSTemplateException(
-                                f"Data doesn't match format for {self.__class__.__name__}. Expected data type of np.uint32, got {hdu.data.dtype}"
+                                f"Data doesn't match format for {self.__class__.__name__}."
+                                " Expected data type of np.uint32, got {hdu.data.dtype}"
                             )
                     else:
                         raise FITSTemplateException(
-                            f"Data doesn't match format for {self.__class__.__name__}. Expected data of type {expected_type} ({expected_type_str}), got {hdu.data.dtype}"
+                            f"Data doesn't match format for {self.__class__.__name__}. "
+                            "Expected data of type {expected_type} ({expected_type_str}), got {hdu.data.dtype}"
                         )
 
     def _validate_mandetory_headers(self, warn=False):
@@ -127,7 +128,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
             )
             for key in expected_header:
                 # fill missing cards
-                if not (key in hdr):
+                if key not in hdr:
                     if warn:
                         hdr[key] = expected_header[key]
                         logger.warning(
@@ -135,7 +136,8 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                         )
                     else:
                         raise FITSValueException(
-                            f"{key} header keyword expected for {self.__class__.__name__} in extension `{extname}`, but not found in data provided."
+                            f"{key} header keyword expected for {self.__class__.__name__} in extension `{extname}`,"
+                            " but not found in data provided."
                         )
                 # check mandetory cards have the correct values
                 if expected_header[key] not in ["", None, np.nan]:
@@ -262,3 +264,19 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
             self._validate_data()
             self._validate_mandetory_headers(warn=self.warn)
             self._validate_no_extra_keywords(warn=self.warn)
+
+    def writeto(
+        self,
+        fileobj,
+        output_verify="exception",
+        overwrite=False,
+        checksum=False,
+    ):
+        self.__class__(
+            fits.HDUList(self).writeto(
+                fileobj=fileobj,
+                output_verify=output_verify,
+                overwrite=overwrite,
+                checksum=checksum,
+            )
+        )
