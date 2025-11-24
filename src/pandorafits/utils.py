@@ -79,9 +79,11 @@ def get_excel_sheet(fname, extno=0):
     for row in ws.iter_rows(values_only=False):
         rows.append(
             [
-                cell.value
-                if cell.data_type != "n"
-                else cell.number_format and cell._value
+                (
+                    cell.value
+                    if cell.data_type != "n"
+                    else cell.number_format and cell._value
+                )
                 for cell in row
             ]
         )

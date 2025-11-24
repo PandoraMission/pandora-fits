@@ -214,11 +214,13 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                         name=hdr[f"TTYPE{idx}"],
                         format=hdr[f"TFORM{idx}"],
                         unit=hdr[f"TUNIT{idx}"] if f"TUNIT{idx}" in hdr else "",
-                        array=generate_random_table_values(
-                            hdr[f"TFORM{idx}"], hdr["NAXIS2"]
-                        )
-                        if hdr["NAXIS2"] != ""
-                        else None,
+                        array=(
+                            generate_random_table_values(
+                                hdr[f"TFORM{idx}"], hdr["NAXIS2"]
+                            )
+                            if hdr["NAXIS2"] != ""
+                            else None
+                        ),
                     )
                     for idx in np.arange(1, ncolumns + 1)
                 ]
