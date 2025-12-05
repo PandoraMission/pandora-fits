@@ -28,14 +28,6 @@ class VISDALevel0HDUList(PandoraHDUList):
     filename = FORMATSDIR + "visda/level0_visda.xlsx"
     reference = VISDAReference
 
-    def to_level1(self):
-        return VISDALevel1HDUList(self)
-
-
-class VISDALevel1HDUList(VISDALevel0HDUList):
-    filename = FORMATSDIR + "visda/level1_visda.xlsx"
-    reference = VISDAReference
-
     @property
     def coord(self):
         return SkyCoord(
@@ -90,6 +82,26 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
                 if (idx * numSubFrms + jdx) == self.nROI:
                     return np.asarray(starlist).transpose([1, 0, 2, 3])
                 starlist.append(d[:, idx, jdx])
+
+    @property
+    def star_row(self):
+        return np.asarray(
+            [r + np.arange(self.ROI_size[0]) for r, _ in self.ROI_corners]
+        )
+
+    @property
+    def star_column(self):
+        return np.asarray(
+            [c + np.arange(self.ROI_size[1]) for _, c in self.ROI_corners]
+        )
+
+    def to_level1(self):
+        return VISDALevel1HDUList(self)
+
+
+class VISDALevel1HDUList(VISDALevel0HDUList):
+    filename = FORMATSDIR + "visda/level1_visda.xlsx"
+    reference = VISDAReference
 
     def to_level1(self):
         raise ValueError("This is a level 1 product.")

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pandorafits"
-version = "0.2.0"
+version = "0.3.0"
 description = "Tools to work with fits files for Pandora"
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 license = "MIT"
@@ -13,6 +13,7 @@ lxml = "^5.3.0"
 astropy = ">=5"
 openpyxl = "^3.1.5"
 pandoraaperture = ">=0.1.1"
+pandoraref = ">=0.3.3"
 
 [tool.poetry.group.dev]
 optional = true

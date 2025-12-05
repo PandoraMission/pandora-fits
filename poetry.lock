@@ -3300,14 +3300,14 @@ sparse3d = ">=1.2.10"
 
 [[package]]
 name = "pandoraref"
-version = "0.3.0"
+version = "0.3.3"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "pandoraref-0.3.0-py3-none-any.whl", hash = "sha256:8d69f765bfb8075e1dc4a1fb0f82e451697ade2cd7854b5a0bf06c5b09bca746"},
-    {file = "pandoraref-0.3.0.tar.gz", hash = "sha256:d32111fce3b1eb46aee42c405b27ded3331cfa8734aea9fb177a7e25dd2b2564"},
+    {file = "pandoraref-0.3.3-py3-none-any.whl", hash = "sha256:6526033ca508855318019825896b7473fc943207800cc6b84f355c8806eba8cc"},
+    {file = "pandoraref-0.3.3.tar.gz", hash = "sha256:ca549d385cd3a5d940a0195f48005a5fb54712874ed17c129026f257780e4cb7"},
 ]
 
 [package.dependencies]
@@ -5244,4 +5244,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "c7135b6d42cd5217091403eac1a830c1add688c41ec6bdc716123664a13f1188"
+content-hash = "3bc1d4761fe380cc5dcd0d2d4bcb325e3148a5acf4f40edf0f8727611280b55f"
