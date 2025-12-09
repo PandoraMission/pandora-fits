@@ -1,5 +1,5 @@
 # flake8: noqa W291
-"""Tools for keeping a database of pandora files"""
+"""Database tools for MOC files database"""
 
 import os
 import sqlite3
@@ -10,58 +10,33 @@ from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 from astropy.io import fits
 from astropy.time import Time
 
-from . import DATA_DIR, DATABASE_DIR, logger
+from .. import LEVEL0_DIR, __version__
+from .mixins import DataBaseMixins
 
 
-def update_filedatabase() -> None:
-    """
-    Creates and updates to the SQLite database file.
-    """
-    with FileDataBase() as db:
-        db.crawl_and_add_parallel(DATA_DIR)
-        db.update_pointings()
-
-
-def delete_filedatabase() -> None:
-    """
-    Deletes the SQLite database file.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the database file does not exist.
-    """
-    db_path = f"{DATABASE_DIR}/pointings.db"
-    if os.path.exists(db_path):
-        os.remove(db_path)
-        logger.info(f"Database at {db_path} has been deleted.")
-    else:
-        raise FileNotFoundError(f"No database found at {db_path}.")
-
-
-class FileDataBase(object):
-    """Database for managing files."""
+class Level0DataBase(DataBaseMixins):
+    """Database for managing files that have been delivered by MOC."""
 
     def __init__(self):
-        self.db_path = f"{DATABASE_DIR}/pointings.db"
+        self.db_path = f"{LEVEL0_DIR}/pointings.db"
         self.conn = sqlite3.connect(self.db_path)
         self.cur = self.conn.cursor()
 
-        # 1. Create table (once)
         self.cur.execute(
             """
         CREATE TABLE IF NOT EXISTS pointings (
             filename TEXT PRIMARY KEY,
             dir TEXT,
             crsoftver TEXT,
+            pfsoftver TEXT,
             finetime INT,
             corstime INT,
             jd FLOAT,
             date STR,
+            exptime FLOAT,
             dpc_obs_id INT,
             start FLOAT,
             instrmnt TEXT,
@@ -86,12 +61,12 @@ class FileDataBase(object):
         )
 
         self.update_str = """INSERT INTO pointings 
-        (filename, dir, crsoftver, finetime, corstime,
-        jd, date, dpc_obs_id, start, instrmnt, roisizex,
+        (filename, dir, crsoftver, pfsoftver, finetime, corstime,
+        jd, date, exptime, dpc_obs_id, start, instrmnt, roisizex,
         roisizey, roistrtx, roistrty, next, astrometry,
         targ_id, ra, dec, naxis1, naxis2, naxis3, naxis4, 
         badchecksum, baddatasum, filesize)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         self.conn.commit()
 
         os.chmod(
@@ -103,18 +78,7 @@ class FileDataBase(object):
         )
 
     def __repr__(self):
-        return "Pandora FileDataBase"
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
-
-    def close(self):
-        """Closes the database connection."""
-        if self.conn:
-            self.conn.close()
+        return "Pandora Level0DataBase"
 
     def check_filename_in_database(self, filename):
         self.cur.execute(
@@ -137,11 +101,28 @@ class FileDataBase(object):
                 baddatasum = len([warn for warn in w if "Datasum" in str(warn.message)])
 
                 hdr = hdulist[0].header
-                time = Time("2000-01-01 12:00:00", scale="tai") + timedelta(
-                    seconds=hdr["CORSTIME"],
-                    milliseconds=hdr["FINETIME"] / 1e6,
-                )
+                time = (
+                    Time("2000-01-01 12:00:00", scale="tai")
+                    + timedelta(
+                        seconds=hdr["CORSTIME"],
+                        milliseconds=hdr["FINETIME"] / 1e6,
+                    )
+                ).utc
                 hdr1 = hdulist[1].header
+
+                if "FRMTIME" in hdr:
+                    frame_time = hdr["FRMTIME"] / 1000
+                elif "EXPTIMEU" in hdr:
+                    frame_time = (
+                        hdr["EXPTIMEU"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
+                    ) / 1.0e6
+                elif "EXPTIME" in hdr:
+                    frame_time = (
+                        hdr["EXPTIME"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
+                    ) / 1.0e6
+
+                nframes = hdr1[f"NAXIS{hdr1['NAXIS']}"]
+                exptime = nframes * frame_time
                 for key in ["FINETIME", "CORSTIME", "INSTRMNT"]:
                     if key not in hdr:
                         return
@@ -149,13 +130,15 @@ class FileDataBase(object):
                     filename.split("/")[-1],
                     "/".join(filename.split("/")[:-1]),
                     hdr["CRSOFTV"],
+                    __version__,
                     hdr["FINETIME"],
                     hdr["CORSTIME"],
                     time.jd,
                     time.isot,
+                    exptime,
                     -1,
                     -1,
-                    hdr["INSTRMNT"][0],
+                    hdr["INSTRMNT"],
                     hdr["ROISIZEX"],
                     hdr["ROISIZEY"],
                     hdr["ROISTRTX"],
@@ -175,33 +158,7 @@ class FileDataBase(object):
                     filesize,
                 )
 
-    def add_entry(self, values):
-        self.cur.execute(
-            self.update_str,
-            values,
-        )
-        self.conn.commit()
-
-    def add_entries(self, values):
-        self.cur.executemany(
-            self.update_str,
-            values,
-        )
-        self.conn.commit()
-
     def crawl_and_add(self, root):
-        for image_type in ["InfImg", "VisSci", "VisImg"]:
-            # for path in Path(root).rglob(f"*{image_type}*.fits"):
-            #     self.add_entry(self.get_entry(str(path)))
-            self.add_entries(
-                [
-                    self.get_entry(str(path))
-                    for path in Path(root).rglob(f"*{image_type}*.fits")
-                    if not self.check_filename_in_database(str(path))
-                ]
-            )
-
-    def crawl_and_add_parallel(self, root, max_workers=16):
         for image_type in ["InfImg", "VisSci", "VisImg"]:
             # for path in Path(root).rglob(f"*{image_type}*.fits"):
             #     self.add_entry(self.get_entry(str(path)))
@@ -211,13 +168,31 @@ class FileDataBase(object):
                 if not self.check_filename_in_database(str(path))
             ]
             rows = []
-            with ThreadPoolExecutor(max_workers=max_workers) as ex:
-                futures = [ex.submit(self.get_entry, p) for p in paths]
-                for fut in as_completed(futures):
-                    row = fut.result()
-                    if row is not None:
-                        rows.append(row)
+            for path in paths:
+                values = self.get_entry(path)
+                if values is not None:
+                    rows.append(values)
             self.add_entries(rows)
+        self.update_pointings()
+
+    # def crawl_and_add_parallel(self, root, max_workers=16):
+    #     for image_type in ["InfImg", "VisSci", "VisImg"]:
+    #         # for path in Path(root).rglob(f"*{image_type}*.fits"):
+    #         #     self.add_entry(self.get_entry(str(path)))
+    #         paths = [
+    #             str(path)
+    #             for path in Path(root).rglob(f"*{image_type}*.fits")
+    #             if not self.check_filename_in_database(str(path))
+    #         ]
+    #         rows = []
+    #         with ThreadPoolExecutor(max_workers=max_workers) as ex:
+    #             futures = [ex.submit(self.get_entry, p) for p in paths]
+    #             for fut in as_completed(futures):
+    #                 row = fut.result()
+    #                 if row is not None:
+    #                     rows.append(row)
+    #         self.add_entries(rows)
+    #     self.update_pointings()
 
     def _update_dpc_obs_id(self):
         sql = """
@@ -290,39 +265,3 @@ class FileDataBase(object):
         self._update_dpc_obs_id()
         self._update_target()
         self._update_start()
-
-    def to_pandas(self, time_range=None, targ_id=None, dpc_obs_id=None):
-        sql = "SELECT * FROM pointings"
-        params = []
-
-        where_clauses = []
-
-        if time_range is not None:
-            start, end = _process_time(time_range[0]), _process_time(time_range[1])
-            start, end = np.sort([start, end])
-            where_clauses.append("jd BETWEEN ? AND ?")
-            params.extend([start, end])
-
-        if targ_id is not None:
-            where_clauses.append("targ_id = ?")
-            params.append(targ_id)
-
-        if dpc_obs_id is not None:
-            where_clauses.append("dpc_obs_id = ?")
-            params.append(dpc_obs_id)
-
-        if where_clauses:
-            sql += " WHERE " + " AND ".join(where_clauses)
-
-        return pd.read_sql_query(sql, self.conn, params=params)
-
-
-def _process_time(time):
-    if isinstance(time, Time):
-        time = time.jd
-    elif not isinstance(time, float):
-        try:
-            time = Time(time).jd
-        except ValueError:
-            raise ValueError("`time_range` must be in JD.")
-    return time

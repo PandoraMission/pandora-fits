@@ -18,10 +18,16 @@ class VISDAFFILevel0HDUList(PandoraHDUList):
     filename = FORMATSDIR + "visda/level0-ffi_visda.xlsx"
     reference = VISDAReference
 
+    def to_level1(self):
+        return VISDAFFILevel1HDUList(self)
 
-class VISDAFFILevel1HDUList(PandoraHDUList):
+
+class VISDAFFILevel1HDUList(VISDAFFILevel0HDUList):
     filename = FORMATSDIR + "visda/level1-ffi_visda.xlsx"
     reference = VISDAReference
+
+    def to_level1(self):
+        raise ValueError("This is a level 1 product.")
 
 
 class VISDALevel0HDUList(PandoraHDUList):

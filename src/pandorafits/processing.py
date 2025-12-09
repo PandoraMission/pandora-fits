@@ -12,10 +12,13 @@ class ProcessingMixins:
     @property
     def start_time(self):
         """Given Pandora HDUList obtains the detector time in TAI."""
-        time = Time("2000-01-01 12:00:00", scale="tai") + timedelta(
-            seconds=self[0].header["CORSTIME"],
-            milliseconds=self[0].header["FINETIME"] / 1e6,
-        )
+        time = (
+            Time("2000-01-01 12:00:00", scale="tai")
+            + timedelta(
+                seconds=self[0].header["CORSTIME"],
+                milliseconds=self[0].header["FINETIME"] / 1e6,
+            )
+        ).utc
         return time
 
     @property

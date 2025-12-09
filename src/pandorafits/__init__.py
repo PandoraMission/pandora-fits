@@ -68,9 +68,13 @@ def reset_config():
     # use this function to set your default configuration parameters.
     config = configparser.ConfigParser()
     config["SETTINGS"] = {
-        "log_level": "WARNING",
+        "log_level": "INFO",
         "data_dir": "/Users/chedges/Downloads/",
-        "database_dir": user_data_dir("pandorafits"),
+        "level0_dir": user_data_dir("pandorafits"),
+        "level1_dir": user_data_dir("pandorafits") + "/level1",
+        "level2_dir": user_data_dir("pandorafits") + "/level2",
+        "level3_dir": user_data_dir("pandorafits") + "/level3",
+        "crsoftver": "v3.01",
     }
     with open(CONFIGPATH, "w") as configfile:
         config.write(configfile)
@@ -115,7 +119,7 @@ config = load_config()
 # Use this to check that keys you expect are in the config file.
 # If you update the config file and think users may be out of date
 # add the config parameters to this loop to check and reset the config.
-for key in ["database_dir", "log_level"]:
+for key in ["level0_dir", "log_level"]:
     if key not in config["SETTINGS"]:
         logger.error(
             f"`{key}` missing from the `pandorafits` config file. Your configuration is being reset."
@@ -123,9 +127,17 @@ for key in ["database_dir", "log_level"]:
         reset_config()
         config = load_config()
 
-DATABASE_DIR = config["SETTINGS"]["database_dir"]
+LEVEL0_DIR = config["SETTINGS"]["level0_dir"]
 DATA_DIR = config["SETTINGS"]["data_dir"]
 logger.setLevel(config["SETTINGS"]["log_level"])
+CRSOFTVER = config["SETTINGS"]["crsoftver"]
+
+LEVEL1_DIR = config["SETTINGS"]["level1_dir"]
+LEVEL2_DIR = config["SETTINGS"]["level2_dir"]
+LEVEL3_DIR = config["SETTINGS"]["level3_dir"]
+
+[os.makedirs(dir, exist_ok=True) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
+[os.chmod(dir, 0o750) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
 
 
 def display_config() -> pd.DataFrame:
@@ -145,6 +157,6 @@ NIRDAReference = pr.NIRDAReference()
 VISDAReference = pr.VISDAReference()
 
 
-from .database import FileDataBase  # noqa
 from .nirda import *  # noqa
 from .visda import *  # noqa
+# from .database import FileDataBase  # noqa

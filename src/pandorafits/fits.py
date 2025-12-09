@@ -102,21 +102,21 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
             if isinstance(hdu, fits.ImageHDU):
                 expected_header = fits.Header(self._get_mandetory_cards(extname))
                 expected_type, expected_type_str = BITPIX_DICT[
-                    expected_header["bitpix"]
+                    int(expected_header["bitpix"])
                 ]
                 if not hdu.data.dtype == expected_type:
-                    if expected_header["bitpix"] == 32:
+                    if int(expected_header["bitpix"]) == 32:
                         if not (int(hdu.header["BSCALE"]) == 1) & (
                             int(hdu.header["BZERO"]) == 2**31
                         ):
                             raise FITSTemplateException(
                                 f"Data doesn't match format for {self.__class__.__name__}."
-                                " Expected data type of np.uint32, got {hdu.data.dtype}"
+                                f" Expected data type of np.uint32, got {hdu.data.dtype}"
                             )
                     else:
                         raise FITSTemplateException(
                             f"Data doesn't match format for {self.__class__.__name__}. "
-                            "Expected data of type {expected_type} ({expected_type_str}), got {hdu.data.dtype}"
+                            f"Expected data of type {expected_type} ({expected_type_str}), got {hdu.data.dtype}"
                         )
 
     def _validate_mandetory_headers(self, warn=False):

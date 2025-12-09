@@ -6,6 +6,7 @@ import numpy as np
 import openpyxl
 import pandas as pd
 from astropy.io import fits
+import hashlib
 
 BITPIX_DICT = {
     8: (">u1", "Unsigned 8-bit integer, big-endian"),
@@ -14,6 +15,11 @@ BITPIX_DICT = {
     -32: (">f4", "32-bit floating-point (float32), big-endian"),
     -64: (">f8", "64-bit floating-point (float64), big-endian"),
 }
+
+
+def get_dpc_hashkey(targ_id, ra, dec):
+    key = (targ_id, np.round(ra, 1), np.round(dec, 1))
+    return hashlib.sha1(repr(key).encode()).hexdigest()[:8]
 
 
 def generate_random_table_values(format_code: str, nvalues: int) -> List:
