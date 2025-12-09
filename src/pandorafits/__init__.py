@@ -119,7 +119,15 @@ config = load_config()
 # Use this to check that keys you expect are in the config file.
 # If you update the config file and think users may be out of date
 # add the config parameters to this loop to check and reset the config.
-for key in ["level0_dir", "log_level"]:
+for key in [
+    "level0_dir",
+    "data_dir",
+    "crsoftver",
+    "level1_dir",
+    "level2_dir",
+    "level3_dir",
+    "log_level",
+]:
     if key not in config["SETTINGS"]:
         logger.error(
             f"`{key}` missing from the `pandorafits` config file. Your configuration is being reset."
@@ -159,4 +167,5 @@ VISDAReference = pr.VISDAReference()
 
 from .nirda import *  # noqa
 from .visda import *  # noqa
+
 # from .database import FileDataBase  # noqa

@@ -1,3 +1,4 @@
+import hashlib
 import random
 import string
 from typing import List
@@ -6,7 +7,6 @@ import numpy as np
 import openpyxl
 import pandas as pd
 from astropy.io import fits
-import hashlib
 
 BITPIX_DICT = {
     8: (">u1", "Unsigned 8-bit integer, big-endian"),

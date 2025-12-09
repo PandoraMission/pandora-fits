@@ -3,17 +3,17 @@
 
 import os
 import sqlite3
-from copy import deepcopy
 import stat
-import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from copy import deepcopy
 
+import numpy as np
 from astropy.time import Time
 
-from .. import LEVEL0_DIR, logger, LEVEL1_DIR, __version__, CRSOFTVER
-from ..visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
+from .. import CRSOFTVER, LEVEL0_DIR, LEVEL1_DIR, __version__, logger
 from ..nirda import NIRDALevel0HDUList
 from ..utils import get_dpc_hashkey
+from ..visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
 from .mixins import DataBaseMixins
 
 
@@ -252,8 +252,8 @@ class Level1DataBase(DataBaseMixins):
     def get_output_filename(self, filename_or_row):
         if isinstance(filename_or_row, tuple):
             row = filename_or_row
-            t = Time(row[9], format="jd").to_datetime()
-            targ_id, ra, dec = row[17], row[18], row[19]
+            t = Time(row[10], format="jd").to_datetime()
+            targ_id, ra, dec = row[18], row[19], row[20]
             fname = row[0]
         elif isinstance(filename_or_row, str):
             filename = filename_or_row

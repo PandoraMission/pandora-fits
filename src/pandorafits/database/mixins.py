@@ -1,10 +1,13 @@
 """Mixins for databases"""
 
+import os
+from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
 from astropy.time import Time
-import threading
-import sqlite3
+
+from .. import LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR, logger  # noqa
 
 
 def _process_time(time):
@@ -54,6 +57,85 @@ class DataBaseMixins:
             sql += " WHERE " + " AND ".join(where_clauses)
 
         return pd.read_sql_query(sql, self.conn, params=params)
+
+    def to_archive_manifest(self):
+        logger.info(f"Creating Level {self.level} archive manifest.")
+        manifest_path = (
+            globals()[f"LEVEL{self.level}_DIR"]
+            + "/"
+            + f"level{self.level}_manifest.csv"
+        )
+        columns = [
+            "Target Name",
+            "RA",
+            "Dec",
+            "Obs. Date Start UT",
+            "Obs. Date Start",
+            "Obs. Date End UT",
+            "Obs. Date End",
+            "Level of file",
+            "Detector",
+            "Processing version",
+            "Full file path",
+            "Filename",
+            "Processing Date",
+            "Delivery Date",
+        ]
+        df = self.to_pandas()
+        k = np.asarray([os.path.isfile(path) for path in df.lvlfilename.values])
+        if not k.any():
+            logger.info(
+                f"No files found for level {self.level} archive manifest. Storing at {manifest_path}"
+            )
+            return pd.DataFrame(columns=columns)
+        adf = (
+            df[k][
+                [
+                    "targ_id",
+                    "ra",
+                    "dec",
+                    "jd",
+                    "instrmnt",
+                    "pfsoftver",
+                    "lvlfilename",
+                    "exptime",
+                ]
+            ]
+            .copy()
+            .reset_index(drop=True)
+        )
+        adf.loc[:, "Obs. Date Start UT"] = Time(adf.jd.values, format="jd").isot
+        adf.loc[:, "Obs. Date End"] = (
+            adf["jd"].values.copy() + adf.exptime.values.copy() / 86400.0
+        )
+        adf.loc[:, "Obs. Date End UT"] = Time(
+            adf["Obs. Date End"].values.copy(), format="jd"
+        ).isot
+        adf["Level of file"] = self.level
+        adf["Processing Date"] = [
+            datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc)
+            .replace(tzinfo=None)
+            .isoformat(timespec="milliseconds")
+            for path in adf["lvlfilename"]
+        ]
+        adf["Delivery Date"] = Time.now().isot
+        adf["Filename"] = [path.split("/")[-1] for path in adf.lvlfilename.values]
+        adf = adf.rename(
+            {
+                "targ_id": "Target Name",
+                "ra": "RA",
+                "dec": "Dec",
+                "jd": "Obs. Date Start",
+                "instrmnt": "Detector",
+                "pfsoftver": "Processing version",
+                "lvlfilename": "Full file path",
+            },
+            axis="columns",
+        )
+        adf = adf[columns]
+        logger.info(f"Archive manifest stored at {manifest_path}")
+
+        return adf
 
     def add_entry(self, values):
         if values is not None:

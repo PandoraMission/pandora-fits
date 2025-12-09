@@ -14,10 +14,10 @@ import pandas as pd
 from astropy.io import fits
 from astropy.time import Time
 
-from . import DATA_DIR, LEVEL0_DIR, logger, LEVEL1_DIR, __version__, CRSOFTVER
-from .visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
+from . import CRSOFTVER, DATA_DIR, LEVEL0_DIR, LEVEL1_DIR, __version__, logger
 from .nirda import NIRDALevel0HDUList
 from .utils import get_dpc_hashkey
+from .visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
 
 
 def update_filedatabase() -> None:
