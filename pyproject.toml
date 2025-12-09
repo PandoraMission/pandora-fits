@@ -1,10 +1,13 @@
 [tool.poetry]
 name = "pandorafits"
-version = "0.4.0"
+version = "0.4.1"
 description = "Tools to work with fits files for Pandora"
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 license = "MIT"
 readme = "README.md"
+
+[tool.isort]
+skip = ["__init__.py", "database/__init__.py"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"

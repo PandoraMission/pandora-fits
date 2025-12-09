@@ -1,5 +1,6 @@
 import os
 
+import pandorafits.database as pfdb  # noqa
 from pandorafits import PACKAGEDIR, logger
 from pandorafits.nirda import NIRDAFFILevel0HDUList, NIRDALevel0HDUList
 from pandorafits.visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
