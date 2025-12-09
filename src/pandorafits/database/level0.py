@@ -29,6 +29,7 @@ class Level0DataBase(DataBaseMixins):
             """
         CREATE TABLE IF NOT EXISTS pointings (
             filename TEXT PRIMARY KEY,
+            lvlfilepath TEXT,
             dir TEXT,
             crsoftver TEXT,
             pfsoftver TEXT,
@@ -61,12 +62,12 @@ class Level0DataBase(DataBaseMixins):
         )
 
         self.update_str = """INSERT INTO pointings 
-        (filename, dir, crsoftver, pfsoftver, finetime, corstime,
+        (filename, lvlfilepath, dir, crsoftver, pfsoftver, finetime, corstime,
         jd, date, exptime, dpc_obs_id, start, instrmnt, roisizex,
         roisizey, roistrtx, roistrty, next, astrometry,
         targ_id, ra, dec, naxis1, naxis2, naxis3, naxis4, 
         badchecksum, baddatasum, filesize)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         self.conn.commit()
 
         os.chmod(
@@ -128,6 +129,7 @@ class Level0DataBase(DataBaseMixins):
                         return
                 return (
                     filename.split("/")[-1],
+                    filename,
                     "/".join(filename.split("/")[:-1]),
                     hdr["CRSOFTV"],
                     __version__,

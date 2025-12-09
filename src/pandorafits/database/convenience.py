@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 
@@ -11,6 +12,7 @@ from .. import (
     LEVEL1_DIR,
     LEVEL2_DIR,
     LEVEL3_DIR,
+    LOG_DIR,
     __version__,
     logger,
 )
@@ -21,8 +23,11 @@ __all__ = [
     "delete_filedatabase",
     "delete_level1database",
     "delete_level2database",
+    "delete_level3database",
     "delete_level1filestorage",
     "delete_level2filestorage",
+    "delete_level3filestorage",
+    "delete_logs",
     "delete_all",
     "get_status",
 ]
@@ -143,8 +148,32 @@ def delete_level3filestorage():
     logger.info("Finished `delete_level3filestorage`")
 
 
+def delete_logs():
+    logger.info("Running `delete_logs`")
+    current_logfile = next(
+        h.baseFilename for h in logger.handlers if isinstance(h, logging.FileHandler)
+    )
+    # Ensure directory exists
+    os.makedirs(LOG_DIR, exist_ok=True)
+
+    # Iterate over all files in the log directory
+    for fname in os.listdir(LOG_DIR):
+        fpath = os.path.join(LOG_DIR, fname)
+
+        # Skip subdirs and skip the current logfile
+        if not os.path.isfile(fpath):
+            continue
+        if os.path.abspath(fpath) == os.path.abspath(current_logfile):
+            continue
+
+        # Delete everything else
+        os.remove(fpath)
+    logger.info("Finished `delete_logs`")
+
+
 def delete_all():
     """Clear all processing data"""
+    delete_logs()
     delete_filedatabase()
     delete_level1database()
     delete_level1filestorage()

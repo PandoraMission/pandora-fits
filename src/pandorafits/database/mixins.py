@@ -82,7 +82,7 @@ class DataBaseMixins:
             "Delivery Date",
         ]
         df = self.to_pandas()
-        k = np.asarray([os.path.isfile(path) for path in df.lvlfilename.values])
+        k = np.asarray([os.path.isfile(path) for path in df.lvlfilepath.values])
         if not k.any():
             logger.info(
                 f"No files found for level {self.level} archive manifest. Storing at {manifest_path}"
@@ -97,7 +97,7 @@ class DataBaseMixins:
                     "jd",
                     "instrmnt",
                     "pfsoftver",
-                    "lvlfilename",
+                    "lvlfilepath",
                     "exptime",
                 ]
             ]
@@ -116,10 +116,10 @@ class DataBaseMixins:
             datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc)
             .replace(tzinfo=None)
             .isoformat(timespec="milliseconds")
-            for path in adf["lvlfilename"]
+            for path in adf["lvlfilepath"]
         ]
         adf["Delivery Date"] = Time.now().isot
-        adf["Filename"] = [path.split("/")[-1] for path in adf.lvlfilename.values]
+        adf["Filename"] = [path.split("/")[-1] for path in adf.lvlfilepath.values]
         adf = adf.rename(
             {
                 "targ_id": "Target Name",
@@ -128,7 +128,7 @@ class DataBaseMixins:
                 "jd": "Obs. Date Start",
                 "instrmnt": "Detector",
                 "pfsoftver": "Processing version",
-                "lvlfilename": "Full file path",
+                "lvlfilepath": "Full file path",
             },
             axis="columns",
         )

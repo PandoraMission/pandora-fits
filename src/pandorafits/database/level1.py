@@ -11,9 +11,14 @@ import numpy as np
 from astropy.time import Time
 
 from .. import CRSOFTVER, LEVEL0_DIR, LEVEL1_DIR, __version__, logger
-from ..nirda import NIRDALevel0HDUList
+from ..nirda import NIRDALevel0HDUList, NIRDALevel1HDUList
 from ..utils import get_dpc_hashkey
-from ..visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
+from ..visda import (
+    VISDAFFILevel0HDUList,
+    VISDAFFILevel1HDUList,
+    VISDALevel0HDUList,
+    VISDALevel1HDUList,
+)
 from .mixins import DataBaseMixins
 
 
@@ -30,7 +35,7 @@ class Level1DataBase(DataBaseMixins):
             """
         CREATE TABLE IF NOT EXISTS pointings (
             filename TEXT PRIMARY KEY,
-            lvlfilename TEXT,
+            lvlfilepath TEXT,
             dir TEXT,
             crsoftver TEXT,
             pfsoftver TEXT,
@@ -62,7 +67,7 @@ class Level1DataBase(DataBaseMixins):
         """
         )
         self.update_str = """INSERT INTO pointings 
-        (filename, lvlfilename, dir, crsoftver, pfsoftver, finetime, corstime,
+        (filename, lvlfilepath, dir, crsoftver, pfsoftver, finetime, corstime,
         jd, date, exptime, dpc_obs_id, start, instrmnt, roisizex,
         roisizey, roistrtx, roistrty, next, astrometry,
         targ_id, ra, dec, naxis1, naxis2, naxis3, naxis4, 
@@ -110,7 +115,7 @@ class Level1DataBase(DataBaseMixins):
             offset = None
 
         base_sql = f"""
-            SELECT src.dir, src.filename
+            SELECT src.lvlfilepath
             FROM level{self.level - 1}.pointings AS src
             LEFT JOIN pointings AS dst
                  ON src.filename = dst.filename
@@ -129,7 +134,7 @@ class Level1DataBase(DataBaseMixins):
         rows = self.cur.fetchall()
 
         if rows:
-            return [f"{d}/{f}" for d, f in rows]
+            return [r[0] for r in rows]
         else:
             return []
 
@@ -247,24 +252,25 @@ class Level1DataBase(DataBaseMixins):
             (fname,),
         )
         row = self.cur.fetchone()
-        return (row[0], self.get_output_filename(row), *row[1:])
+        return (row[0], self.get_output_filename(row), *row[2:])
 
     def get_output_filename(self, filename_or_row):
         if isinstance(filename_or_row, tuple):
             row = filename_or_row
-            t = Time(row[10], format="jd").to_datetime()
-            targ_id, ra, dec = row[18], row[19], row[20]
+            t = Time(row[11], format="jd").to_datetime()
+            targ_id, ra, dec = row[19], row[20], row[21]
             fname = row[0]
         elif isinstance(filename_or_row, str):
-            filename = filename_or_row
-            fname = filename.split("/")[-1] if "/" in filename else filename
+            # filename = filename_or_row
+            # fname = filename.split("/")[-1] if "/" in filename else filename
             self.cur.execute(
-                f"SELECT start, targ_id, ra, dec FROM level{self.level - 1}.pointings WHERE filename=?",
-                (fname,),
+                f"SELECT filename, start, targ_id, ra, dec FROM level{self.level - 1}.pointings WHERE lvlfilepath=?",
+                (filename_or_row,),
             )
             row = self.cur.fetchone()
-            t = Time(row[0], format="jd").to_datetime()
-            targ_id, ra, dec = row[1:]
+            t = Time(row[1], format="jd").to_datetime()
+            targ_id, ra, dec = row[2:]
+            fname = row[0]
             if row is None:
                 return None
         elif filename_or_row is None:
@@ -278,18 +284,42 @@ class Level1DataBase(DataBaseMixins):
         logger.info("Ensuring file directory present.")
         path = self.get_output_filename(filename)
         os.makedirs("/".join(path.split("/")[:-1]), exist_ok=True)
-        if "VisSci" in filename:
-            with VISDALevel0HDUList(filename) as hdulist:
-                hdulist = getattr(hdulist, f"to_level{self.level}")()
-                hdulist.writeto(path, overwrite=True, checksum=True)
-        if "VisImg" in filename:
-            with VISDAFFILevel0HDUList(filename) as hdulist:
-                hdulist = getattr(hdulist, f"to_level{self.level}")()
-                hdulist.writeto(path, overwrite=True, checksum=True)
-        if "InfImg" in filename:
-            with NIRDALevel0HDUList(filename) as hdulist:
-                hdulist = getattr(hdulist, f"to_level{self.level}")()
-                hdulist.writeto(path, overwrite=True, checksum=True)
+        filemap = {
+            "VisSci": globals()[f"VISDALevel{self.level - 1}HDUList"],
+            "VisImg": globals()[f"VISDAFFILevel{self.level - 1}HDUList"],
+            "InfImg": globals()[f"NIRDALevel{self.level - 1}HDUList"],
+        }
+        for key, HDUList in filemap.items():
+            if key in filename:
+                try:
+                    with HDUList(filename) as hdulist:
+                        hdulist = getattr(hdulist, f"to_level{self.level}")()
+                        hdulist.writeto(path, overwrite=True, checksum=True)
+                except:
+                    logger.exception(
+                        f"Error while creating {HDUList.__name__} file. Skipping."
+                    )
+                    return None
+        # if "VisImg" in filename:
+        #     try:
+        #         with VISDAFFILevel0HDUList(filename) as hdulist:
+        #             hdulist = getattr(hdulist, f"to_level{self.level}")()
+        #             hdulist.writeto(path, overwrite=True, checksum=True)
+        #     except:
+        #         logger.exception(
+        #             "Error while creating VISDAFFILevel{self.level}HDUList file. Skipping."
+        #         )
+        #         return None
+        # if "InfImg" in filename:
+        #     try:
+        #         with NIRDALevel0HDUList(filename) as hdulist:
+        #             hdulist = getattr(hdulist, f"to_level{self.level}")()
+        #             hdulist.writeto(path, overwrite=True, checksum=True)
+        #     except:
+        #         logger.exception(
+        #             "Error while creating NIRDALevel{self.level}HDUList file. Skipping."
+        #         )
+        #         return None
         logger.info(f"Wrote {filename.split('/')[-1]} to {path}")
         return self.get_entry(filename)
 

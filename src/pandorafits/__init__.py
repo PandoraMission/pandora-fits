@@ -31,31 +31,39 @@ __version__ = get_version()
 
 # Custom Logger with Rich
 class PandoraLogger(logging.Logger):
-    def __init__(self, name, level=logging.INFO):
+    def __init__(self, name, level=logging.INFO, logfile="DPC.log"):
         super().__init__(name, level)
+
+        # --- Console (Rich) handler ---
         console = Console()
-        self.handler = RichHandler(
+        console_handler = RichHandler(
             show_time=False, show_level=False, show_path=False, console=console
         )
-        self.handler.setFormatter(
+        console_handler.setFormatter(
             logging.Formatter(
                 "%(asctime)s %(levelname)s: %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
-        self.addHandler(self.handler)
 
+        # --- File handler ---
+        file_handler = logging.FileHandler(logfile)
+        file_handler.setLevel(level)
+        file_handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)s: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
 
-def get_logger(name="pandorafits"):
-    """Configure and return a logger with RichHandler."""
-    return PandoraLogger(name)
+        # Attach both handlers
+        self.addHandler(console_handler)
+        self.addHandler(file_handler)
 
 
 CONFIGDIR = user_config_dir("pandorafits")
 os.makedirs(CONFIGDIR, exist_ok=True)
 CONFIGPATH = os.path.join(CONFIGDIR, "config.ini")
-
-logger = get_logger("pandorafits")
 
 
 CONFIGDIR = user_config_dir("pandorafits")
@@ -70,6 +78,7 @@ def reset_config():
     config["SETTINGS"] = {
         "log_level": "INFO",
         "data_dir": "/Users/chedges/Downloads/",
+        "log_dir": user_data_dir("pandorafits") + "/logs",
         "level0_dir": user_data_dir("pandorafits"),
         "level1_dir": user_data_dir("pandorafits") + "/level1",
         "level2_dir": user_data_dir("pandorafits") + "/level2",
@@ -116,6 +125,24 @@ def save_config(config: configparser.ConfigParser) -> None:
 
 config = load_config()
 
+
+def get_logger(name="pandorafits"):
+    """Configure and return a logger with RichHandler."""
+
+    jobid = os.environ.get("PBS_JOBID", "nojob")
+    pid = os.getpid()
+    logfile = f"{LOG_DIR}/pandoraDPC_{jobid}_{pid}.log"
+    logger = PandoraLogger("pandora", logfile=logfile)
+    return logger
+
+
+LOG_DIR = config["SETTINGS"]["log_dir"]
+os.makedirs(LOG_DIR, exist_ok=True)
+os.chmod(LOG_DIR, 0o750)
+logger = get_logger("pandorafits")
+logger.setLevel(config["SETTINGS"]["log_level"])
+
+
 # Use this to check that keys you expect are in the config file.
 # If you update the config file and think users may be out of date
 # add the config parameters to this loop to check and reset the config.
@@ -126,7 +153,6 @@ for key in [
     "level1_dir",
     "level2_dir",
     "level3_dir",
-    "log_level",
 ]:
     if key not in config["SETTINGS"]:
         logger.error(
@@ -137,7 +163,6 @@ for key in [
 
 LEVEL0_DIR = config["SETTINGS"]["level0_dir"]
 DATA_DIR = config["SETTINGS"]["data_dir"]
-logger.setLevel(config["SETTINGS"]["log_level"])
 CRSOFTVER = config["SETTINGS"]["crsoftver"]
 
 LEVEL1_DIR = config["SETTINGS"]["level1_dir"]
