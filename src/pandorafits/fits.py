@@ -29,6 +29,8 @@ class FITSValueException(Exception):
 def _clean_header_cards(hdr: fits.Header):
     """Cleans the list of cards to ensure they have reasonable values."""
     for key in hdr:
+        if key == "COMMENT":
+            continue
         if hdr[key] in ["TRUE", "True", "T"]:
             hdr[key] = True
         if hdr[key] in ["FALSE", "False", "F"]:
@@ -73,7 +75,8 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         for hdu, expected_type in zip(self, self.extension_types):
             if not isinstance(hdu, getattr(fits, expected_type)):
                 raise FITSTemplateException(
-                    f"Data doesn't match format for {self.__class__.__name__}. Expected extension type {expected_type}, got {hdu}."
+                    f"[EXT {hdu.header['EXTNAME']}] Data doesn't match format for {self.__class__.__name__}. "
+                    + f"Expected extension type {expected_type}, got {hdu}."
                 )
 
     def _validate_n_ext(self):
@@ -104,18 +107,20 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 expected_type, expected_type_str = BITPIX_DICT[
                     int(expected_header["bitpix"])
                 ]
-                if not hdu.data.dtype == expected_type:
+                if hdu.data.dtype == expected_type:
                     if int(expected_header["bitpix"]) == 32:
                         if not (int(hdu.header["BSCALE"]) == 1) & (
                             int(hdu.header["BZERO"]) == 2**31
                         ):
                             raise FITSTemplateException(
-                                f"Data doesn't match format for {self.__class__.__name__}."
+                                f"[EXT {hdu.header['EXTNAME']}] Data doesn't match format for {self.__class__.__name__}."
                                 f" Expected data type of np.uint32, got {hdu.data.dtype}"
                             )
+                    if int(expected_header["bitpix"]) == -64:
+                        continue
                     else:
                         raise FITSTemplateException(
-                            f"Data doesn't match format for {self.__class__.__name__}. "
+                            f"[EXT {hdu.header['EXTNAME']}] Data doesn't match format for {self.__class__.__name__}. "
                             f"Expected data of type {expected_type} ({expected_type_str}), got {hdu.data.dtype}"
                         )
 
@@ -127,16 +132,18 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 fits.Header(self._get_mandetory_cards(extname))
             )
             for key in expected_header:
+                if key == "COMMENT":
+                    continue
                 # fill missing cards
                 if key not in hdr:
                     if warn:
                         hdr[key] = expected_header[key]
                         logger.warning(
-                            f"Key {key} expected in extension `{extname}` but not found. Added this key."
+                            f"[EXT {hdr['EXTNAME']}] Key {key} expected in extension `{extname}` but not found. Added this key."
                         )
                     else:
                         raise FITSValueException(
-                            f"{key} header keyword expected for {self.__class__.__name__} in extension `{extname}`,"
+                            f"[EXT {hdr['EXTNAME']}] {key} header keyword expected for {self.__class__.__name__} in extension `{extname}`,"
                             " but not found in data provided."
                         )
                 # check mandetory cards have the correct values
@@ -145,7 +152,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                         if isinstance(expected_header[key], bool):
                             continue
                         raise FITSValueException(
-                            f"{key} expected to have value of {expected_header[key]}, but has value {hdr[key]}."
+                            f"[EXT {hdr['EXTNAME']}] {key} expected to have value of {expected_header[key]}, but has value {hdr[key]}."
                         )
 
     def _validate_no_extra_keywords(self, warn=False):
@@ -156,6 +163,8 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 fits.Header(self._get_mandetory_cards(extname))
             )
             for key in hdr:
+                if key == "COMMENT":
+                    continue
                 if key not in expected_header:
                     if warn:
                         hdr.pop(key)
@@ -164,7 +173,8 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                         )
                     else:
                         raise FITSTemplateException(
-                            f"{key} header keyword is not expected for {self.__class__.__name__} in extension `{extname}`."
+                            f"[EXT {hdr['EXTNAME']}] {key} header keyword is not expected for {self.__class__.__name__}"
+                            + f" in extension `{extname}`."
                         )
 
     def _get_dummy_hdus(self):
@@ -186,7 +196,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                     if (int(hdr["BSCALE"]) == 1) and (int(hdr["BZERO"]) == 2**15):
                         data = np.ones(shape, dtype=np.uint16)
                     else:
-                        raise FITSValueException("Can not parse data type")
+                        raise FITSValueException(
+                            f"[EXT {hdr['EXTNAME']}] Can not parse data type"
+                        )
                 else:
                     data = np.ones(shape, dtype=BITPIX_DICT[hdr["BITPIX"]][0])
                 hdu = fits.CompImageHDU(header=hdr, data=data)
@@ -201,7 +213,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                     if (int(hdr["BSCALE"]) == 1) and (int(hdr["BZERO"]) == 2**31):
                         data = np.ones(shape, dtype=np.uint32)
                     else:
-                        raise FITSValueException("Can not parse data type")
+                        raise FITSValueException(
+                            f"[EXT {hdr['EXTNAME']}] Can not parse data type"
+                        )
                 else:
                     data = np.ones(shape, dtype=BITPIX_DICT[hdr["BITPIX"]][0])
                 hdu = fits.ImageHDU(header=hdr, data=data)
@@ -227,7 +241,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
 
                 hdu = fits.TableHDU.from_columns(columns, header=hdr)
             else:
-                raise FITSValueException(f"No extension type {exttype}.")
+                raise FITSValueException(
+                    f"[EXT {hdr['EXTNAME']}] No extension type {exttype}."
+                )
             cards = self._get_mandetory_cards(extname)
             _ = [hdu.header.append(card) for card in cards if card[0] not in hdu.header]
             hdulist.append(hdu)
@@ -282,3 +298,6 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 checksum=checksum,
             )
         )
+
+    def copy(self):
+        return self.__class__(super().copy())

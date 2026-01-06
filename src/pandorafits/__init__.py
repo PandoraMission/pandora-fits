@@ -3,6 +3,7 @@ import configparser  # noqa: E402
 import logging  # noqa: E402
 import os  # noqa
 from importlib.metadata import PackageNotFoundError, version  # noqa
+import pandoraaperture as pa  # noqa
 
 # Third-party
 import numpy as np  # noqa: E402

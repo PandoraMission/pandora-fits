@@ -18,7 +18,11 @@ BITPIX_DICT = {
 
 
 def get_dpc_hashkey(targ_id, ra, dec):
-    key = (targ_id, np.round(ra, 1), np.round(dec, 1))
+    key = (
+        targ_id,
+        np.round(np.nan_to_num(ra) if ra is not None else 0.0, 1),
+        np.round(np.nan_to_num(dec) if dec is not None else 0.0, 1),
+    )
     return hashlib.sha1(repr(key).encode()).hexdigest()[:8]
 
 
@@ -91,6 +95,7 @@ def get_excel_sheet(fname, extno=0):
                     else cell.number_format and cell._value
                 )
                 for cell in row
+                if row[0] not in ["", None, np.nan]
             ]
         )
 
@@ -101,11 +106,37 @@ def get_excel_sheet(fname, extno=0):
     return df
 
 
-def hdulist_to_excel(hdulist, filename="output.xlsx"):
+def hdulist_to_dataframes(hdulist):
+    fixed_keys = [
+        "SIMPLE",
+        "BITPIX",
+        "XTENSION",
+        "NAXIS",
+        "EXTEND",
+        "EXTNAME",
+        "NEXTEND",
+        "TELESCOP",
+        "CAMERAID",
+        "INSTRMNT",
+        "TFIELDS",
+        "BSCALE",
+        "BZERO",
+    ]
+    fixed_keys = np.hstack(
+        [
+            fixed_keys,
+            *[
+                [
+                    tabkey + f"{idx}"
+                    for tabkey in ["TTYPE", "TFORM", "TBCOL"]
+                    for idx in range(40)
+                ]
+            ],
+        ]
+    )
     if isinstance(hdulist, str):
         hdulist = fits.open(hdulist)
 
-    sheet_names = ["Primary", *[f"Ext{idx}" for idx in np.arange(1, len(hdulist))]]
     dfs = pd.DataFrame(
         [
             np.asarray([hdu.header["EXTNAME"] for hdu in hdulist]),
@@ -118,16 +149,38 @@ def hdulist_to_excel(hdulist, filename="output.xlsx"):
         dfs,
         *[
             pd.DataFrame(
-                np.asarray([np.asarray(card) for card in hdu.header.cards]),
+                np.asarray(
+                    [
+                        np.asarray(card)
+                        for card in hdu.header.cards
+                        if card[0] is not None
+                    ]
+                ),
                 columns=["Name", "Example Value", "Comment"],
             )
             for hdu in hdulist
         ],
     ]
+    for df in dfs[1:]:
+        df["Fixed Value"] = None
+
+    for idx, df in enumerate(dfs):
+        if idx == 0:
+            continue
+        df = df.set_index("Name")
+        for key in fixed_keys:
+            if key in df.index:
+                df.loc[key, "Fixed Value"] = df.loc[key, "Example Value"]
+        dfs[idx] = df.reset_index()
+    return dfs
+
+
+def hdulist_to_excel(hdulist, filename="output.xlsx"):
+    sheet_names = ["Primary", *[f"Ext{idx}" for idx in np.arange(1, len(hdulist))]]
+    dfs = hdulist_to_dataframes(hdulist)
     with pd.ExcelWriter(filename, engine="openpyxl") as writer:
         dfs[0].to_excel(writer, sheet_name="Structure", index=False)
         for name, df in zip(sheet_names, dfs[1:]):
-            df["Fixed Value"] = None
             df[["Name", "Fixed Value", "Example Value", "Comment"]].to_excel(
                 writer, sheet_name=name, index=False
             )

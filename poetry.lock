@@ -3277,14 +3277,14 @@ files = [
 
 [[package]]
 name = "pandoraaperture"
-version = "0.1.1"
+version = "0.1.8"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "pandoraaperture-0.1.1-py3-none-any.whl", hash = "sha256:a6a5c55bc33acbe69c0d07946534df7db6332cfc60546f8650dd921d4b6ac9e8"},
-    {file = "pandoraaperture-0.1.1.tar.gz", hash = "sha256:913756c0fa26b151074bdb073048879c7178b548006e4c4c38643d241d73be89"},
+    {file = "pandoraaperture-0.1.8-py3-none-any.whl", hash = "sha256:0c4f1b74f7c19aba176182f3eed3c704181714afaf9bc7e71795d6afbbcf1846"},
+    {file = "pandoraaperture-0.1.8.tar.gz", hash = "sha256:bf5a4be467ecc3ee1ae0b862f5b042ea94a984d88cea5f7c6a6c032659bbce06"},
 ]
 
 [package.dependencies]
@@ -5244,4 +5244,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "3bc1d4761fe380cc5dcd0d2d4bcb325e3148a5acf4f40edf0f8727611280b55f"
+content-hash = "1280c7dc05f919372677707ada3bc4a382c24c77ee650a9805d637bd5a012122"

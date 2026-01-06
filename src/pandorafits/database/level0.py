@@ -10,64 +10,73 @@ from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.time import Time
 
-from .. import LEVEL0_DIR, __version__
-from .mixins import DataBaseMixins
+from .. import DATA_DIR, LEVEL0_DIR, __version__
+from .mixins import DataBaseMixins, FileDataBaseMixins
+from .roll import get_roll
 
 
-class Level0DataBase(DataBaseMixins):
+class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
     """Database for managing files that have been delivered by MOC."""
 
+    table_name = "pointings"
+    _sql_key_dict = {
+        "filename": "TEXT PRIMARY KEY",
+        "lvlfilename": "TEXT",
+        "dir": "TEXT",
+        "lvldir": "TEXT",
+        "crsoftver": "TEXT",
+        "pfsoftver": "TEXT",
+        "finetime": "INT",
+        "corstime": "INT",
+        "jd": "FLOAT",
+        "date": "STR",
+        "exptime": "FLOAT",
+        "dpc_obs_id": "INT",
+        "start": "FLOAT",
+        "instrmnt": "TEXT",
+        "roisizex": "INT",
+        "roisizey": "INT",
+        "roistrtx": "INT",
+        "roistrty": "INT",
+        "next": "INT",
+        "astrometry": "BOOL",
+        "targ_id": "STR",
+        "targ_ra": "FLOAT",
+        "targ_dec": "FLOAT",
+        "targ_rll": "FLOAT",
+        "naxis1": "INT",
+        "naxis2": "INT",
+        "naxis3": "INT",
+        "naxis4": "INT",
+        "badchecksum": "INT",
+        "baddatasum": "INT",
+        "filesize": "FLOAT",
+    }
+
     def __init__(self):
-        self.db_path = f"{LEVEL0_DIR}/pointings.db"
+        self.db_path = f"{LEVEL0_DIR}/{self.table_name}.db"
         self.conn = sqlite3.connect(self.db_path)
         self.cur = self.conn.cursor()
 
-        self.cur.execute(
-            """
-        CREATE TABLE IF NOT EXISTS pointings (
-            filename TEXT PRIMARY KEY,
-            lvlfilepath TEXT,
-            dir TEXT,
-            crsoftver TEXT,
-            pfsoftver TEXT,
-            finetime INT,
-            corstime INT,
-            jd FLOAT,
-            date STR,
-            exptime FLOAT,
-            dpc_obs_id INT,
-            start FLOAT,
-            instrmnt TEXT,
-            roisizex INT,
-            roisizey INT,
-            roistrtx INT,
-            roistrty INT,
-            next INT,
-            astrometry BOOL,
-            targ_id STR,
-            ra FLOAT,
-            dec FLOAT,
-            naxis1 INT,
-            naxis2 INT,
-            naxis3 INT,
-            naxis4 INT,
-            badchecksum INT,
-            baddatasum INT,
-            filesize FLOAT
+        key_string = ", ".join(
+            [f"{key} {item}" for key, item in self._sql_key_dict.items()]
         )
+        self.cur.execute(
+            f"""
+        CREATE TABLE IF NOT EXISTS {self.table_name} ({key_string})
         """
         )
 
-        self.update_str = """INSERT INTO pointings 
-        (filename, lvlfilepath, dir, crsoftver, pfsoftver, finetime, corstime,
-        jd, date, exptime, dpc_obs_id, start, instrmnt, roisizex,
-        roisizey, roistrtx, roistrty, next, astrometry,
-        targ_id, ra, dec, naxis1, naxis2, naxis3, naxis4, 
-        badchecksum, baddatasum, filesize)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        key_string = ", ".join([f"{key}" for key, item in self._sql_key_dict.items()])
+        value_string = ", ".join(["?"] * len(self._sql_key_dict))
+        self.update_str = f"""INSERT INTO {self.table_name} 
+        ({key_string})
+        VALUES ({value_string})"""
         self.conn.commit()
 
         os.chmod(
@@ -83,7 +92,7 @@ class Level0DataBase(DataBaseMixins):
 
     def check_filename_in_database(self, filename):
         self.cur.execute(
-            "SELECT 1 FROM pointings WHERE filename=?",
+            f"SELECT 1 FROM {self.table_name} WHERE filename=?",
             ((filename.split("/")[-1] if "/" in filename else filename),),
         )
         return self.cur.fetchone() is not None
@@ -129,7 +138,8 @@ class Level0DataBase(DataBaseMixins):
                         return
                 return (
                     filename.split("/")[-1],
-                    filename,
+                    filename.split("/")[-1],
+                    "/".join(filename.split("/")[:-1]),
                     "/".join(filename.split("/")[:-1]),
                     hdr["CRSOFTV"],
                     __version__,
@@ -151,6 +161,7 @@ class Level0DataBase(DataBaseMixins):
                     hdr["TARG_ID"] if "TARG_ID" in hdr else None,
                     hdr["TARG_RA"] if "TARG_RA" in hdr else None,
                     hdr["TARG_DEC"] if "TARG_DEC" in hdr else None,
+                    0.0,
                     hdr1["NAXIS1"] if "NAXIS1" in hdr1 else None,
                     hdr1["NAXIS2"] if "NAXIS2" in hdr1 else None,
                     hdr1["NAXIS3"] if "NAXIS3" in hdr1 else None,
@@ -160,7 +171,8 @@ class Level0DataBase(DataBaseMixins):
                     filesize,
                 )
 
-    def crawl_and_add(self, root):
+    def crawl_and_add(self):
+        root = DATA_DIR
         for image_type in ["InfImg", "VisSci", "VisImg"]:
             # for path in Path(root).rglob(f"*{image_type}*.fits"):
             #     self.add_entry(self.get_entry(str(path)))
@@ -197,7 +209,7 @@ class Level0DataBase(DataBaseMixins):
     #     self.update_pointings()
 
     def _update_dpc_obs_id(self):
-        sql = """
+        sql = f"""
         WITH changes AS (
         SELECT
             targ_id,
@@ -206,7 +218,7 @@ class Level0DataBase(DataBaseMixins):
             THEN 0          -- same target as previous row → same visit
             ELSE 1          -- target changed (or first row) → new visit
             END AS is_new_visit
-        FROM pointings
+        FROM {self.table_name}
         ),
         visits AS (
         SELECT
@@ -214,40 +226,40 @@ class Level0DataBase(DataBaseMixins):
             SUM(is_new_visit) OVER (ORDER BY jd, targ_id) AS dpc_obs_id
         FROM changes
         )
-        UPDATE pointings
+        UPDATE {self.table_name}
         SET dpc_obs_id = (
-        SELECT dpc_obs_id FROM visits WHERE visits.targ_id = pointings.targ_id
+        SELECT dpc_obs_id FROM visits WHERE visits.targ_id = {self.table_name}.targ_id
         );
 
         """
         self.conn.execute(sql)
 
     def _update_target(self):
-        sql = """
+        sql = f"""
         WITH filled AS (
         SELECT
             targ_id,
-            MAX(ra)  OVER (
+            MAX(targ_ra)  OVER (
             PARTITION BY dpc_obs_id
             ORDER BY jd
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             ) AS ra_filled,
-            MAX(dec) OVER (
+            MAX(targ_dec) OVER (
             PARTITION BY dpc_obs_id
             ORDER BY jd
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             ) AS dec_filled
-        FROM pointings
+        FROM {self.table_name}
         )
-        UPDATE pointings
-        SET ra  = (SELECT ra_filled  FROM filled WHERE filled.targ_id = pointings.targ_id),
-            dec = (SELECT dec_filled FROM filled WHERE filled.targ_id = pointings.targ_id)
-        WHERE ra IS NULL OR dec IS NULL;
+        UPDATE {self.table_name}
+        SET targ_ra  = (SELECT ra_filled  FROM filled WHERE filled.targ_id = {self.table_name}.targ_id),
+            targ_dec = (SELECT dec_filled FROM filled WHERE filled.targ_id = {self.table_name}.targ_id)
+        WHERE targ_ra IS NULL OR targ_dec IS NULL;
         """
         self.conn.execute(sql)
 
     def _update_start(self):
-        sql = """
+        sql = f"""
         WITH filled AS (
         SELECT
             targ_id,
@@ -256,14 +268,61 @@ class Level0DataBase(DataBaseMixins):
             ORDER BY jd
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             ) AS start_filled
-        FROM pointings
+        FROM {self.table_name}
         )
-        UPDATE pointings
-        SET start = (SELECT start_filled FROM filled WHERE filled.targ_id = pointings.targ_id)
+        UPDATE {self.table_name}
+        SET start = (SELECT start_filled FROM filled WHERE filled.targ_id = {self.table_name}.targ_id)
         """
         self.conn.execute(sql)
+
+    def _update_roll(self):
+        df = pd.read_sql_query(
+            f"SELECT start, targ_ra, targ_dec FROM {self.table_name} WHERE start = jd",
+            self.conn,
+        )
+        df["targ_rll"] = [
+            get_roll(Time(start, format="jd"), SkyCoord(ra, dec, unit="deg"))[0].value
+            for start, ra, dec in df.values
+        ]
+
+        # 1) write df to a temp table
+        df.to_sql("roll_map", self.conn, if_exists="replace", index=False)
+
+        # 2) (optional but strongly recommended) index the join keys in both tables
+        self.cur.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_main_keys ON {self.table_name}(start, targ_ra, targ_dec)"
+        )
+        self.cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_map_keys  ON roll_map(start, targ_ra, targ_dec)"
+        )
+        self.conn.commit()
+
+        # 3) update matching rows (fills duplicates in main table too)
+        self.cur.execute(
+            f"""
+        UPDATE {self.table_name}
+        SET targ_rll = (
+        SELECT m.targ_rll
+        FROM roll_map m
+        WHERE m.start = {self.table_name}.start
+            AND m.targ_ra    = {self.table_name}.targ_ra
+            AND m.targ_dec   = {self.table_name}.targ_dec
+        )
+        WHERE EXISTS (
+        SELECT 1
+        FROM roll_map m
+        WHERE m.start = {self.table_name}.start
+            AND m.targ_ra    = {self.table_name}.targ_ra
+            AND m.targ_dec   = {self.table_name}.targ_dec
+        );
+        """
+        )
+        self.conn.commit()
+        self.cur.execute("DROP TABLE IF EXISTS roll_map")
+        self.conn.commit()
 
     def update_pointings(self):
         self._update_dpc_obs_id()
         self._update_target()
         self._update_start()
+        self._update_roll()

@@ -12,70 +12,18 @@ from ..nirda import NIRDALevel1HDUList
 from ..utils import get_dpc_hashkey
 from ..visda import VISDAFFILevel1HDUList, VISDALevel1HDUList
 from .level1 import Level1DataBase
-from .mixins import DataBaseMixins
+from .mixins import DataBaseMixins, FileDataBaseMixins
 
 
-class Level2DataBase(Level1DataBase, DataBaseMixins):
+class Level2DataBase(Level1DataBase, FileDataBaseMixins, DataBaseMixins):
     """Database for managing Level 2 files."""
 
-    def __init__(self):
-        self.level = 2
-        self.level_dir = LEVEL2_DIR
-        self.db_path = f"{self.level_dir}/level{self.level}.db"
-        self.conn = sqlite3.connect(self.db_path, timeout=120)
-        self.cur = self.conn.cursor()
-        self.cur.execute(
-            """
-        CREATE TABLE IF NOT EXISTS pointings (
-            filename TEXT PRIMARY KEY,
-            lvlfilepath TEXT,
-            dir TEXT,
-            crsoftver TEXT,
-            pfsoftver TEXT,
-            finetime INT,
-            corstime INT,
-            jd FLOAT,
-            date STR,
-            exptime FLOAT,
-            dpc_obs_id INT,
-            start FLOAT,
-            instrmnt TEXT,
-            roisizex INT,
-            roisizey INT,
-            roistrtx INT,
-            roistrty INT,
-            next INT,
-            astrometry BOOL,
-            targ_id STR,
-            ra FLOAT,
-            dec FLOAT,
-            naxis1 INT,
-            naxis2 INT,
-            naxis3 INT,
-            naxis4 INT,
-            badchecksum INT,
-            baddatasum INT,
-            filesize FLOAT
-        )
-        """
-        )
-        self.update_str = """INSERT INTO pointings 
-        (filename, lvlfilepath, dir, crsoftver, pfsoftver, finetime, corstime,
-        jd, date, exptime, dpc_obs_id, start, instrmnt, roisizex,
-        roisizey, roistrtx, roistrty, next, astrometry,
-        targ_id, ra, dec, naxis1, naxis2, naxis3, naxis4, 
-        badchecksum, baddatasum, filesize)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
-        self.conn.commit()
+    table_name = "pointings"
+    level = 2
+    level_dir = LEVEL2_DIR
 
-        os.chmod(
-            self.db_path,
-            stat.S_IRUSR
-            | stat.S_IWUSR  # owner: read/write
-            | stat.S_IRGRP
-            | stat.S_IWGRP,  # group: read/write
-        )
-        self.cur.execute(f"ATTACH DATABASE '{LEVEL0_DIR}/pointings.db' AS level0")
+    def __init__(self):
+        super().__init__()
         self.cur.execute(f"ATTACH DATABASE '{LEVEL1_DIR}/level1.db' AS level1")
 
     # def process(self, filename):

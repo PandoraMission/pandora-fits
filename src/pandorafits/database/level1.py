@@ -19,62 +19,70 @@ from ..visda import (
     VISDALevel0HDUList,
     VISDALevel1HDUList,
 )
-from .mixins import DataBaseMixins
+from .mixins import DataBaseMixins, FileDataBaseMixins
 
 
-class Level1DataBase(DataBaseMixins):
+class Level1DataBase(FileDataBaseMixins, DataBaseMixins):
     """Database for managing Level 1 files."""
 
+    table_name = "pointings"
+    level = 1
+    level_dir = LEVEL1_DIR
+
+    _sql_key_dict = {
+        "filename": "TEXT PRIMARY KEY",
+        "lvlfilename": "TEXT",
+        "dir": "TEXT",
+        "lvldir": "TEXT",
+        "crsoftver": "TEXT",
+        "pfsoftver": "TEXT",
+        "finetime": "INT",
+        "corstime": "INT",
+        "jd": "FLOAT",
+        "date": "STR",
+        "exptime": "FLOAT",
+        "dpc_obs_id": "INT",
+        "start": "FLOAT",
+        "instrmnt": "TEXT",
+        "roisizex": "INT",
+        "roisizey": "INT",
+        "roistrtx": "INT",
+        "roistrty": "INT",
+        "next": "INT",
+        "astrometry": "BOOL",
+        "targ_id": "STR",
+        "targ_ra": "FLOAT",
+        "targ_dec": "FLOAT",
+        "targ_rll": "FLOAT",
+        "naxis1": "INT",
+        "naxis2": "INT",
+        "naxis3": "INT",
+        "naxis4": "INT",
+        "badchecksum": "INT",
+        "baddatasum": "INT",
+        "filesize": "FLOAT",
+    }
+
     def __init__(self):
-        self.level = 1
-        self.level_dir = LEVEL1_DIR
         self.db_path = f"{self.level_dir}/level{self.level}.db"
         self.conn = sqlite3.connect(self.db_path, timeout=120)
         self.cur = self.conn.cursor()
-        self.cur.execute(
-            """
-        CREATE TABLE IF NOT EXISTS pointings (
-            filename TEXT PRIMARY KEY,
-            lvlfilepath TEXT,
-            dir TEXT,
-            crsoftver TEXT,
-            pfsoftver TEXT,
-            finetime INT,
-            corstime INT,
-            jd FLOAT,
-            date STR,
-            exptime FLOAT,
-            dpc_obs_id INT,
-            start FLOAT,
-            instrmnt TEXT,
-            roisizex INT,
-            roisizey INT,
-            roistrtx INT,
-            roistrty INT,
-            next INT,
-            astrometry BOOL,
-            targ_id STR,
-            ra FLOAT,
-            dec FLOAT,
-            naxis1 INT,
-            naxis2 INT,
-            naxis3 INT,
-            naxis4 INT,
-            badchecksum INT,
-            baddatasum INT,
-            filesize FLOAT
+
+        key_string = ", ".join(
+            [f"{key} {item}" for key, item in self._sql_key_dict.items()]
         )
+        self.cur.execute(
+            f"""
+        CREATE TABLE IF NOT EXISTS pointings ({key_string})
         """
         )
-        self.update_str = """INSERT INTO pointings 
-        (filename, lvlfilepath, dir, crsoftver, pfsoftver, finetime, corstime,
-        jd, date, exptime, dpc_obs_id, start, instrmnt, roisizex,
-        roisizey, roistrtx, roistrty, next, astrometry,
-        targ_id, ra, dec, naxis1, naxis2, naxis3, naxis4, 
-        badchecksum, baddatasum, filesize)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
-        self.conn.commit()
 
+        key_string = ", ".join([f"{key}" for key, item in self._sql_key_dict.items()])
+        value_string = ", ".join(["?"] * len(self._sql_key_dict))
+        self.update_str = f"""INSERT INTO pointings 
+        ({key_string})
+        VALUES ({value_string})"""
+        self.conn.commit()
         os.chmod(
             self.db_path,
             stat.S_IRUSR
@@ -102,7 +110,7 @@ class Level1DataBase(DataBaseMixins):
         nrows = self.cur.fetchone()[0]
         return nrows
 
-    def get_files_to_process(self, crsoftver=CRSOFTVER, nchunks=None, chunk=None):
+    def get_x_to_process(self, x, crsoftver=CRSOFTVER, nchunks=None, chunk=None):
         # Compute limit/offset if chunking is requested
         if nchunks is not None and chunk is not None:
             # total files
@@ -115,7 +123,7 @@ class Level1DataBase(DataBaseMixins):
             offset = None
 
         base_sql = f"""
-            SELECT src.lvlfilepath
+            SELECT {x}
             FROM level{self.level - 1}.pointings AS src
             LEFT JOIN pointings AS dst
                  ON src.filename = dst.filename
@@ -134,9 +142,31 @@ class Level1DataBase(DataBaseMixins):
         rows = self.cur.fetchall()
 
         if rows:
-            return [r[0] for r in rows]
+            return rows
         else:
             return []
+
+    def get_files_to_process(self, crsoftver=CRSOFTVER, nchunks=None, chunk=None):
+        files = self.get_x_to_process(
+            x="src.lvldir, src.lvlfilename",
+            crsoftver=crsoftver,
+            nchunks=nchunks,
+            chunk=chunk,
+        )
+        return [f"{f[0]}/{f[1]}" for f in files]
+
+    def n_files_to_process(self, crsoftver=CRSOFTVER):
+        return self.get_x_to_process(
+            x="COUNT()", crsoftver=crsoftver, nchunks=None, chunk=None
+        )[0]
+
+    def get_pointings_to_process(self, crsoftver=CRSOFTVER, nchunks=None, chunk=None):
+        return self.get_x_to_process(
+            x="src.targ_ra, src.targ_dec, src.targ_rll",
+            crsoftver=crsoftver,
+            nchunks=nchunks,
+            chunk=chunk,
+        )
 
     # def _is_bad_value(
     #     self, fname, expected_entry, entry, name, level, remove_bad_entries=True
@@ -248,28 +278,37 @@ class Level1DataBase(DataBaseMixins):
     def get_entry(self, filename):
         fname = filename.split("/")[-1] if "/" in filename else filename
         self.cur.execute(
-            "SELECT * FROM level0.pointings WHERE filename=?",
+            f"SELECT * FROM level{self.level - 1}.pointings WHERE lvlfilename=?",
             (fname,),
         )
         row = self.cur.fetchone()
-        return (row[0], self.get_output_filename(row), *row[2:])
+        output_filename = self.get_output_filename(row)
+        lvldir, lvlfilename = (
+            "/".join(output_filename.split("/")[:-1]),
+            output_filename.split("/")[-1],
+        )
+        return (row[0], lvlfilename, row[2], lvldir, *row[4:])
 
     def get_output_filename(self, filename_or_row):
         if isinstance(filename_or_row, tuple):
             row = filename_or_row
-            t = Time(row[11], format="jd").to_datetime()
-            targ_id, ra, dec = row[19], row[20], row[21]
+            t = Time(row[12], format="jd").to_datetime()
+            targ_id, targ_ra, targ_dec = row[20], row[21], row[22]
             fname = row[0]
         elif isinstance(filename_or_row, str):
             # filename = filename_or_row
-            # fname = filename.split("/")[-1] if "/" in filename else filename
+            fname = (
+                filename_or_row.split("/")[-1]
+                if "/" in filename_or_row
+                else filename_or_row
+            )
             self.cur.execute(
-                f"SELECT filename, start, targ_id, ra, dec FROM level{self.level - 1}.pointings WHERE lvlfilepath=?",
-                (filename_or_row,),
+                f"SELECT filename, start, targ_id, targ_ra, targ_dec FROM level{self.level - 1}.pointings WHERE lvlfilename=?",
+                (fname,),
             )
             row = self.cur.fetchone()
             t = Time(row[1], format="jd").to_datetime()
-            targ_id, ra, dec = row[2:]
+            targ_id, targ_ra, targ_dec = row[2:]
             fname = row[0]
             if row is None:
                 return None
@@ -277,9 +316,9 @@ class Level1DataBase(DataBaseMixins):
             return None
         fname_no_suffix = ".".join(fname.split(".")[:-1])
         suffix = fname.split(".")[-1]
-        return f"{self.level_dir}/{t.year}/{t.month}/{t.day}/{get_dpc_hashkey(targ_id, ra, dec)}/{fname_no_suffix}_v{__version__.replace('.', '-')}_l{self.level}.{suffix}"
+        return f"{self.level_dir}/{t.year}/{t.month}/{t.day}/{get_dpc_hashkey(targ_id, targ_ra, targ_dec)}/{fname_no_suffix}_v{__version__.replace('.', '-')}_l{self.level}.{suffix}"
 
-    def process(self, filename):
+    def process(self, filename, **kwargs):
         logger.info(f"Processing {filename} to Level {self.level}.")
         logger.info("Ensuring file directory present.")
         path = self.get_output_filename(filename)
@@ -293,33 +332,14 @@ class Level1DataBase(DataBaseMixins):
             if key in filename:
                 try:
                     with HDUList(filename) as hdulist:
-                        hdulist = getattr(hdulist, f"to_level{self.level}")()
+                        hdulist = getattr(hdulist, f"to_level{self.level}")(**kwargs)
                         hdulist.writeto(path, overwrite=True, checksum=True)
                 except:
                     logger.exception(
                         f"Error while creating {HDUList.__name__} file. Skipping."
                     )
                     return None
-        # if "VisImg" in filename:
-        #     try:
-        #         with VISDAFFILevel0HDUList(filename) as hdulist:
-        #             hdulist = getattr(hdulist, f"to_level{self.level}")()
-        #             hdulist.writeto(path, overwrite=True, checksum=True)
-        #     except:
-        #         logger.exception(
-        #             "Error while creating VISDAFFILevel{self.level}HDUList file. Skipping."
-        #         )
-        #         return None
-        # if "InfImg" in filename:
-        #     try:
-        #         with NIRDALevel0HDUList(filename) as hdulist:
-        #             hdulist = getattr(hdulist, f"to_level{self.level}")()
-        #             hdulist.writeto(path, overwrite=True, checksum=True)
-        #     except:
-        #         logger.exception(
-        #             "Error while creating NIRDALevel{self.level}HDUList file. Skipping."
-        #         )
-        #         return None
+
         logger.info(f"Wrote {filename.split('/')[-1]} to {path}")
         return self.get_entry(filename)
 
@@ -338,10 +358,21 @@ class Level1DataBase(DataBaseMixins):
     #     self.add_entries(rows)
 
     def crawl_and_process(self, crsoftver=CRSOFTVER, nchunks=None, chunk=None):
-        for path in self.get_files_to_process(
+        paths = self.get_files_to_process(
             crsoftver=crsoftver, nchunks=nchunks, chunk=chunk
-        ):
-            self.add_entry(self.process(path))
+        )
+        pointings = self.get_pointings_to_process(
+            crsoftver=crsoftver, nchunks=nchunks, chunk=chunk
+        )
+        for pointing, path in zip(pointings, paths):
+            self.add_entry(
+                self.process(
+                    path,
+                    targ_ra=pointing[0] if pointing[0] is not None else 0,
+                    targ_dec=pointing[1] if pointing[1] is not None else 0,
+                    targ_rll=pointing[2] if pointing[2] is not None else 0,
+                )
+            )
 
     # def crawl_and_process_parallel(self, max_workers=16, crsoftver=CRSOFTVER):
     #     paths = list(self.files_to_process(crsoftver=crsoftver))

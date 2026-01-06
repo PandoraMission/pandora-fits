@@ -33,8 +33,23 @@ class DataBaseMixins:
         if self.conn:
             self.conn.close()
 
-    def to_pandas(self, time_range=None, targ_id=None, dpc_obs_id=None):
-        sql = "SELECT * FROM pointings"
+    def add_entry(self, values):
+        if values is not None:
+            self.cur.execute(
+                self.update_str,
+                values,
+            )
+            self.conn.commit()
+
+    def add_entries(self, values):
+        self.cur.executemany(
+            self.update_str,
+            [v for v in values if v is not None],
+        )
+        self.conn.commit()
+
+    def to_pandas(self, time_range=None, **kwargs):
+        sql = f"SELECT * FROM {self.table_name}"
         params = []
 
         where_clauses = []
@@ -45,19 +60,18 @@ class DataBaseMixins:
             where_clauses.append("jd BETWEEN ? AND ?")
             params.extend([start, end])
 
-        if targ_id is not None:
-            where_clauses.append("targ_id = ?")
-            params.append(targ_id)
-
-        if dpc_obs_id is not None:
-            where_clauses.append("dpc_obs_id = ?")
-            params.append(dpc_obs_id)
+        for kwarg in kwargs.items():
+            if kwarg[1] is not None:
+                where_clauses.append(f"{kwarg[0]} = ?")
+                params.append(kwarg[1])
 
         if where_clauses:
             sql += " WHERE " + " AND ".join(where_clauses)
 
         return pd.read_sql_query(sql, self.conn, params=params)
 
+
+class FileDataBaseMixins:
     def to_archive_manifest(self):
         logger.info(f"Creating Level {self.level} archive manifest.")
         manifest_path = (
@@ -92,8 +106,8 @@ class DataBaseMixins:
             df[k][
                 [
                     "targ_id",
-                    "ra",
-                    "dec",
+                    "targ_ra",
+                    "targ_dec",
                     "jd",
                     "instrmnt",
                     "pfsoftver",
@@ -123,8 +137,8 @@ class DataBaseMixins:
         adf = adf.rename(
             {
                 "targ_id": "Target Name",
-                "ra": "RA",
-                "dec": "Dec",
+                "targ_ra": "RA",
+                "targ_dec": "Dec",
                 "jd": "Obs. Date Start",
                 "instrmnt": "Detector",
                 "pfsoftver": "Processing version",
@@ -135,19 +149,4 @@ class DataBaseMixins:
         adf = adf[columns]
         logger.info(f"Archive manifest stored at {manifest_path}")
 
-        return adf
-
-    def add_entry(self, values):
-        if values is not None:
-            self.cur.execute(
-                self.update_str,
-                values,
-            )
-            self.conn.commit()
-
-    def add_entries(self, values):
-        self.cur.executemany(
-            self.update_str,
-            [v for v in values if v is not None],
-        )
-        self.conn.commit()
+        adf.to_csv(manifest_path, index=False)
