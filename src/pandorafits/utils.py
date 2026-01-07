@@ -1,12 +1,11 @@
 import hashlib
 import random
 import string
-from typing import List
+from typing import List, Union
 
 import numpy as np
 import openpyxl
 import pandas as pd
-from astropy.io import fits
 
 BITPIX_DICT = {
     8: (">u1", "Unsigned 8-bit integer, big-endian"),
@@ -81,6 +80,58 @@ def generate_random_table_values(format_code: str, nvalues: int) -> List:
         raise ValueError("Unsupported format code")
 
 
+def generate_random_bintable_values(
+    format_code: str, nrows: int
+) -> Union[np.ndarray, list[str]]:
+    """
+    Generate random values suitable for astropy.io.fits BinTableHDU columns.
+
+    Supported TFORM-style format codes:
+      - 'D', 'nD'  : float64 scalar or fixed-length vector per row
+      - 'K', 'nK'  : int64 scalar or fixed-length vector per row
+      - 'wA'       : fixed-length ASCII string width w (e.g. '19A')
+
+    Returns:
+      - np.ndarray for numeric columns
+      - list[str]  for 'A' columns (each exactly width characters)
+    """
+    fmt = format_code.strip().upper()
+
+    # String: e.g. "19A"
+    if fmt.endswith("A"):
+        width_str = fmt[:-1]
+        if not width_str.isdigit():
+            raise ValueError(
+                f"Unsupported string format: {format_code!r} (expected like '19A')"
+            )
+        width = int(width_str)
+
+        alphabet = string.ascii_letters + string.digits + " _-"
+        return ["".join(random.choices(alphabet, k=width)) for _ in range(nrows)]
+
+    # Numeric: allow optional repeat count like "3D" or "10K"
+    # If no leading digits, repeat=1.
+    i = 0
+    while i < len(fmt) and fmt[i].isdigit():
+        i += 1
+    repeat = int(fmt[:i]) if i > 0 else 1
+    code = fmt[i:]
+
+    if code == "D":
+        # float64
+        arr = np.random.uniform(-1e10, 1e10, size=(nrows, repeat)).astype(np.float64)
+        return arr[:, 0] if repeat == 1 else arr
+
+    if code == "K":
+        # int64 (use a safer subset of full range to avoid edge-case overflows elsewhere)
+        lo = np.iinfo(np.int64).min // 1000
+        hi = np.iinfo(np.int64).max // 1000
+        arr = np.random.randint(lo, hi, size=(nrows, repeat), dtype=np.int64)
+        return arr[:, 0] if repeat == 1 else arr
+
+    raise ValueError(f"Unsupported BinTableHDU format code: {format_code!r}")
+
+
 def get_excel_sheet(fname, extno=0):
     wb = openpyxl.load_workbook(fname, data_only=False)
     ws = wb.worksheets[extno]
@@ -104,83 +155,3 @@ def get_excel_sheet(fname, extno=0):
     df = df[1:].reset_index(drop=True)
     df = df[~df.apply(lambda row: row.isnull().all(), axis=1)].reset_index(drop=True)
     return df
-
-
-def hdulist_to_dataframes(hdulist):
-    fixed_keys = [
-        "SIMPLE",
-        "BITPIX",
-        "XTENSION",
-        "NAXIS",
-        "EXTEND",
-        "EXTNAME",
-        "NEXTEND",
-        "TELESCOP",
-        "CAMERAID",
-        "INSTRMNT",
-        "TFIELDS",
-        "BSCALE",
-        "BZERO",
-    ]
-    fixed_keys = np.hstack(
-        [
-            fixed_keys,
-            *[
-                [
-                    tabkey + f"{idx}"
-                    for tabkey in ["TTYPE", "TFORM", "TBCOL"]
-                    for idx in range(40)
-                ]
-            ],
-        ]
-    )
-    if isinstance(hdulist, str):
-        hdulist = fits.open(hdulist)
-
-    dfs = pd.DataFrame(
-        [
-            np.asarray([hdu.header["EXTNAME"] for hdu in hdulist]),
-            np.asarray([type(hdu).__name__ for hdu in hdulist]),
-            np.zeros(len(hdulist), bool),
-        ]
-    ).T
-    dfs.columns = ["Extension", "Type", "Optional"]
-    dfs = [
-        dfs,
-        *[
-            pd.DataFrame(
-                np.asarray(
-                    [
-                        np.asarray(card)
-                        for card in hdu.header.cards
-                        if card[0] is not None
-                    ]
-                ),
-                columns=["Name", "Example Value", "Comment"],
-            )
-            for hdu in hdulist
-        ],
-    ]
-    for df in dfs[1:]:
-        df["Fixed Value"] = None
-
-    for idx, df in enumerate(dfs):
-        if idx == 0:
-            continue
-        df = df.set_index("Name")
-        for key in fixed_keys:
-            if key in df.index:
-                df.loc[key, "Fixed Value"] = df.loc[key, "Example Value"]
-        dfs[idx] = df.reset_index()
-    return dfs
-
-
-def hdulist_to_excel(hdulist, filename="output.xlsx"):
-    sheet_names = ["Primary", *[f"Ext{idx}" for idx in np.arange(1, len(hdulist))]]
-    dfs = hdulist_to_dataframes(hdulist)
-    with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-        dfs[0].to_excel(writer, sheet_name="Structure", index=False)
-        for name, df in zip(sheet_names, dfs[1:]):
-            df[["Name", "Fixed Value", "Example Value", "Comment"]].to_excel(
-                writer, sheet_name=name, index=False
-            )

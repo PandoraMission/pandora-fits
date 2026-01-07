@@ -3277,14 +3277,14 @@ files = [
 
 [[package]]
 name = "pandoraaperture"
-version = "0.1.8"
+version = "0.1.13"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "pandoraaperture-0.1.8-py3-none-any.whl", hash = "sha256:0c4f1b74f7c19aba176182f3eed3c704181714afaf9bc7e71795d6afbbcf1846"},
-    {file = "pandoraaperture-0.1.8.tar.gz", hash = "sha256:bf5a4be467ecc3ee1ae0b862f5b042ea94a984d88cea5f7c6a6c032659bbce06"},
+    {file = "pandoraaperture-0.1.13-py3-none-any.whl", hash = "sha256:3f600085c417ca5e6f5ede3bef164251b88ab125c8db9ff7a81a0fd77f176497"},
+    {file = "pandoraaperture-0.1.13.tar.gz", hash = "sha256:d2ee6e5120536b849bd63a70c0b8c23343a155d8c2e2693b11cb969a3d445608"},
 ]
 
 [package.dependencies]
@@ -4810,14 +4810,14 @@ files = [
 
 [[package]]
 name = "sparse3d"
-version = "1.2.10"
+version = "1.2.11"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main"]
 files = [
-    {file = "sparse3d-1.2.10-py3-none-any.whl", hash = "sha256:03f8192330347e86625b2f3d4ad9d39e8b1f20009dc73713982127c29763e3a7"},
-    {file = "sparse3d-1.2.10.tar.gz", hash = "sha256:a66e94ace7ad9736327b9df59e5779f465b8714b6ed86586aa18e91570b8b3a5"},
+    {file = "sparse3d-1.2.11-py3-none-any.whl", hash = "sha256:158e6c51a1ad2e4e5b5c3cf22db2c518da1d220ef81d6b3a8b70f1b7e8b14852"},
+    {file = "sparse3d-1.2.11.tar.gz", hash = "sha256:4e07bfd4255f3e4624dc810e4f07528762f185ad6c6a11667fdc01b314e54d75"},
 ]
 
 [package.dependencies]
@@ -5244,4 +5244,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "1280c7dc05f919372677707ada3bc4a382c24c77ee650a9805d637bd5a012122"
+content-hash = "087b3d02dbdb300f4eba1cc8abd8a45a5c607941d92ffd177d3ada59c5c872d5"

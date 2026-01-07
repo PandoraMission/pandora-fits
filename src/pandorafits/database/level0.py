@@ -5,7 +5,6 @@ import os
 import sqlite3
 import stat
 import warnings
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
 from pathlib import Path
 
@@ -16,8 +15,8 @@ from astropy.io import fits
 from astropy.time import Time
 
 from .. import DATA_DIR, LEVEL0_DIR, __version__
+from ..roll import get_roll
 from .mixins import DataBaseMixins, FileDataBaseMixins
-from .roll import get_roll
 
 
 class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
@@ -161,7 +160,7 @@ class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
                     hdr["TARG_ID"] if "TARG_ID" in hdr else None,
                     hdr["TARG_RA"] if "TARG_RA" in hdr else None,
                     hdr["TARG_DEC"] if "TARG_DEC" in hdr else None,
-                    0.0,
+                    40.0,
                     hdr1["NAXIS1"] if "NAXIS1" in hdr1 else None,
                     hdr1["NAXIS2"] if "NAXIS2" in hdr1 else None,
                     hdr1["NAXIS3"] if "NAXIS3" in hdr1 else None,

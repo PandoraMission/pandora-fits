@@ -78,7 +78,7 @@ def reset_config():
     config = configparser.ConfigParser()
     config["SETTINGS"] = {
         "log_level": "INFO",
-        "data_dir": "/Users/chedges/Downloads/",
+        "data_dir": "/Users/chedges/Desktop/newlancedata/",
         "log_dir": user_data_dir("pandorafits") + "/logs",
         "level0_dir": user_data_dir("pandorafits"),
         "level1_dir": user_data_dir("pandorafits") + "/level1",
@@ -190,7 +190,7 @@ def display_config() -> pd.DataFrame:
 NIRDAReference = pr.NIRDAReference()
 VISDAReference = pr.VISDAReference()
 
-
+from .io import *
 from .nirda import *  # noqa
 from .visda import *  # noqa
 

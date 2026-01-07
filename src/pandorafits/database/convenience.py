@@ -23,6 +23,7 @@ from . import AstrometryDataBase, Level0DataBase
 
 __all__ = [
     "delete_astrometrydatabase",
+    "update_astrometrydatabase",
     "update_level0database",
     "delete_level0database",
     "delete_level1database",
@@ -63,8 +64,7 @@ def update_astrometrydatabase() -> None:
     Creates and updates to the SQLite database file.
     """
     with AstrometryDataBase() as db:
-        db.crawl_and_add_parallel(DATA_DIR)
-        db.update_pointings()
+        db.crawl_and_add()
 
 
 def update_level0database() -> None:
@@ -72,8 +72,7 @@ def update_level0database() -> None:
     Creates and updates to the SQLite database file.
     """
     with Level0DataBase() as db:
-        db.crawl_and_add_parallel(DATA_DIR)
-        db.update_pointings()
+        db.crawl_and_add()
 
 
 def delete_level0database() -> None:
@@ -208,13 +207,13 @@ def delete_logs():
 def delete_all():
     """Clear all processing data"""
     delete_logs()
-    delete_level0database()
     delete_astrometrydatabase()
+    delete_level0database()
     delete_level1database()
     delete_level1filestorage()
+    delete_level2database()
     delete_level2filestorage()
-    delete_level2filestorage()
-    delete_level3filestorage()
+    delete_level3database()
     delete_level3filestorage()
 
 

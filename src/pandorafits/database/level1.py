@@ -4,21 +4,12 @@
 import os
 import sqlite3
 import stat
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from copy import deepcopy
 
 import numpy as np
 from astropy.time import Time
 
 from .. import CRSOFTVER, LEVEL0_DIR, LEVEL1_DIR, __version__, logger
-from ..nirda import NIRDALevel0HDUList, NIRDALevel1HDUList
 from ..utils import get_dpc_hashkey
-from ..visda import (
-    VISDAFFILevel0HDUList,
-    VISDAFFILevel1HDUList,
-    VISDALevel0HDUList,
-    VISDALevel1HDUList,
-)
 from .mixins import DataBaseMixins, FileDataBaseMixins
 
 
@@ -330,16 +321,9 @@ class Level1DataBase(FileDataBaseMixins, DataBaseMixins):
         }
         for key, HDUList in filemap.items():
             if key in filename:
-                try:
-                    with HDUList(filename) as hdulist:
-                        hdulist = getattr(hdulist, f"to_level{self.level}")(**kwargs)
-                        hdulist.writeto(path, overwrite=True, checksum=True)
-                except:
-                    logger.exception(
-                        f"Error while creating {HDUList.__name__} file. Skipping."
-                    )
-                    return None
-
+                with HDUList(filename) as hdulist:
+                    hdulist = getattr(hdulist, f"to_level{self.level}")(**kwargs)
+                    hdulist.writeto(path, overwrite=True, checksum=True)
         logger.info(f"Wrote {filename.split('/')[-1]} to {path}")
         return self.get_entry(filename)
 
@@ -365,14 +349,19 @@ class Level1DataBase(FileDataBaseMixins, DataBaseMixins):
             crsoftver=crsoftver, nchunks=nchunks, chunk=chunk
         )
         for pointing, path in zip(pointings, paths):
-            self.add_entry(
-                self.process(
-                    path,
-                    targ_ra=pointing[0] if pointing[0] is not None else 0,
-                    targ_dec=pointing[1] if pointing[1] is not None else 0,
-                    targ_rll=pointing[2] if pointing[2] is not None else 0,
+            try:
+                self.add_entry(
+                    self.process(
+                        path,
+                        targ_ra=pointing[0] if pointing[0] is not None else 0,
+                        targ_dec=pointing[1] if pointing[1] is not None else 0,
+                        targ_rll=pointing[2] if pointing[2] is not None else 40,
+                    )
                 )
-            )
+            except:
+                logger.exception(
+                    f"Error while increasing Level {self.level - 1} to Level {self.level} [{path}]. Skipping."
+                )
 
     # def crawl_and_process_parallel(self, max_workers=16, crsoftver=CRSOFTVER):
     #     paths = list(self.files_to_process(crsoftver=crsoftver))

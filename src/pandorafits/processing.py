@@ -8,8 +8,10 @@ import numpy as np
 from astropy.io import fits
 from astropy.time import Time
 from astropy.wcs import WCS
+from astropy.table import Table
 
 from . import __version__, logger
+from .database import AstrometryDataBase
 
 
 class ProcessingMixins:
@@ -76,6 +78,18 @@ class ProcessingMixins:
         return self[1].header[f"NAXIS{self[1].header['NAXIS']}"]
 
     @property
+    def ncoadds(self):
+        if "FRMPCOAD" in self[0].header:
+            return self[0].header["FRMPCOAD"]
+        elif self[0].header["INSTRMNT"] == "VISDA":
+            return 1
+        if self[0].header["GRPSAVGD"] == 0:
+            return 1
+        else:
+            logger.warning("Currently missing GROUPS keyword header, check with Lance")
+            return 1
+
+    @property
     def end_time(self):
         return self.start_time + self.nframes * self.frame_time
 
@@ -109,7 +123,7 @@ class ProcessingMixins:
             )
             return
         value = self._get_reference_detector_image(name)
-        self[1].data = func(self[1].data, value)
+        self["SCIENCE"].data = func(self["SCIENCE"].data, value)
         self[0].header["COMMENT"] = f"Applied {name}."
 
     def _subtract_bias(self):
@@ -137,6 +151,11 @@ class ProcessingMixins:
     def _multiply_gain(self):
         logger.info("Multiplying gain")
         self._apply_detector_image("gain", lambda x, y: x * y)
+        self[1].header.set(
+            "UNIT",
+            "electrons/pixel  ",
+            "data units: electrons/pixel",
+        )
 
     def _append_quality(self):
         logger.info("Appending quality")
@@ -147,34 +166,121 @@ class ProcessingMixins:
         logger.info("Applying WCS")
         hdr = self[0].header
         wcs = self.reference.get_wcs(
-            hdr["targ_ra"],
-            hdr["targ_dec"],
-            hdr["targ_rll"],
+            hdr["targ_ra"] if hdr["targ_ra"] is not None else 0,
+            hdr["targ_dec"] if hdr["targ_dec"] is not None else 0,
+            hdr["targ_rll"] if hdr["targ_rll"] is not None else 40,
             distortion=True,
             yreflect=True,
         )
-        self[1].header.extend(wcs.to_header(relax=True))
+        wcs_hdr = wcs.to_header(relax=True)
+
+        self[1].header.extend(wcs_hdr)
         self[0].header["COMMENT"] = "Appended WCS."
 
-    def to_level1(
-        self, targ_ra=None, targ_dec=None, targ_rll=None, upcast=True, **kwargs
-    ):
-        if "1" in self.__class__.__name__:
-            raise ValueError("This is a Level 1 Product.")
+    def _append_error_extension(self):
+        """Procedure to make error extension, specific to VISDALevel1HDUList."""
+        # This is a silly estimate of photon noise, we're going to do better than this once we commission
+        error = np.abs(self["science"].data) ** 0.5
+        # This is one possible noise. Again, we'll do better after commissioning
+        readnoise = (
+            ((self.reference.get_readnoise() ** 2 * self.ncoadds) ** 0.5 * u.pixel)
+            .to(u.electron)
+            .value
+        )
+        hdr = fits.Header([self["science"].header.cards["UNIT"]])
+        errorhdu = fits.ImageHDU(error + readnoise, hdr, name="ERROR")
+        self.append(errorhdu)
+
+        logger.info("Appended error extension")
+        return
+
+    def to_level1(self, upcast=True, **kwargs):
         new = self.copy()
         new[0].header["PFSOFTV"] = __version__
 
         def update_attr(name, value, comment=None):
             if value is not None:
+                if name in new[0].header:
+                    if new[0].header[name] not in [None, ""]:
+                        # Do not overwrite existing keywords
+                        return
                 new[0].header[name] = (value, comment)
-            elif (value is not None) & (name not in new[0].header):
+            elif (value is None) & (name not in new[0].header):
                 new[0].header[name] = (0, comment)
 
-        update_attr("TARG_RA", targ_ra, "Target right ascension [deg]")
-        update_attr("TARG_DEC", targ_dec, "Target declination [deg]")
-        update_attr("TARG_RLL", targ_rll, "Commanded roll [deg]")
+        # For finding targets we tolerate any files that are taken during the same observation or within 30s of the observation.
+        time_buffer = 30.0 / 86400.0
+        time_range = (self.start_time.jd - time_buffer, self.end_time.jd + time_buffer)
+        with AstrometryDataBase() as db:
+            df = db.to_pandas(time_range=time_range)
+
+        if len(df) != 0:
+            targ_ra, targ_dec, targ_rll = (
+                df.targ_ra.mode()[0],
+                df.targ_dec.mode()[0],
+                df.targ_rll.mode()[0],
+            )
+        else:
+            targ_ra, targ_dec, targ_rll = 0, 0, 40
+
+        if len(df) > 0:
+            if len(df.targ_id.unique()) != 1:
+                logger.warning("This file seems to cover multiple targets/pointings.")
+            # This should select the most common target ID in the case of many target IDs
+            targ_id = df.targ_id.mode()[0]
+        else:
+            targ_id = "unknown"
+
+        update_attr(
+            "TARG_RA",
+            targ_ra,
+            "Target right ascension [deg]",
+        )
+        update_attr(
+            "TARG_DEC",
+            targ_dec,
+            "Target declination [deg]",
+        )
+        update_attr(
+            "TARG_RLL",
+            targ_rll,
+            "Commanded roll [deg]",
+        )
+        update_attr(
+            "TARG_ID",
+            targ_id,
+            "Target ID/keyword",
+        )
+
+        # This header keyword set isn't fitting in FITS conventions so we're renaming them if present.
+        # We switch it out to "UNIT"
+        for key in ["TTYPE1", "TFORM1", "TUNIT1"]:
+            if key in new[1].header:
+                new[1].header.remove(key)
+
+        new[1].header["UNIT"] = "COUNTS"
+        new[1].header["PFSOFTV"] = __version__
+
+        if "ASTROMETRY" not in self:
+            # Here we add the astrometry information to any file that can have it, but we won't overwrite it if it exists.
+            ast_tab = df[["jd", "ra", "dec", "roll"]].rename(
+                {
+                    "jd": "JD",
+                    "ra": "RightAscension",
+                    "dec": "Declination",
+                    "roll": "Rotation",
+                },
+                axis="columns",
+            )
+            ast_tab = fits.convenience.table_to_hdu(Table.from_pandas(ast_tab))
+            ast_tab.header.extend(fits.Header([("EXTNAME", "ASTROMETRY", "")]))
+            new.append(ast_tab)
+
+        new[0].header["PFCLASS"] = new.__class__.__name__.replace(
+            f"{self.level}", f"{self.level + 1}"
+        )
         if upcast:
-            return new.__to_l1__()
+            new = new.__to_l1__()
         return new
 
     def to_level2(self, upcast=True, **kwargs):
@@ -190,6 +296,11 @@ class ProcessingMixins:
         new._append_quality()
         new._append_wcs()
         new._append_scene_extensions()
+        new._append_error_extension()
+        new[0].header["PFCLASS"] = new.__class__.__name__.replace(
+            f"{self.level}", f"{self.level + 1}"
+        )
+
         if upcast:
-            return new.__to_l2__()
+            new = new.__to_l2__()
         return new

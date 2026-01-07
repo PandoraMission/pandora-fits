@@ -33,6 +33,10 @@ def list_to_panels(data, border=True):
                     :, star, :, :
                 ]
                 star += 1
+                if star >= num_stars:
+                    break
+            if star >= num_stars:
+                break
     if dim == 3:
         return dCube[0]
     return dCube

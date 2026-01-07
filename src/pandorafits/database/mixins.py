@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from astropy.time import Time
 
-from .. import LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR, logger  # noqa
+from .. import logger  # noqa
 
 
 def _process_time(time):

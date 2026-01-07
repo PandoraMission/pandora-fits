@@ -1,24 +1,14 @@
 # flake8: noqa W291
 """Tools for keeping a database of pandora files"""
 
-import os
-import sqlite3
-import stat
-
 from astropy.time import Time
 
 from .. import (
-    CRSOFTVER,
-    LEVEL0_DIR,
-    LEVEL1_DIR,
     LEVEL2_DIR,
     LEVEL3_DIR,
     __version__,
-    logger,
 )
-from ..nirda import NIRDALevel0HDUList
 from ..utils import get_dpc_hashkey
-from ..visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
 from .level1 import Level1DataBase
 from .mixins import DataBaseMixins, FileDataBaseMixins
 

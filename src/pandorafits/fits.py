@@ -7,9 +7,16 @@ from astropy.io import fits
 
 from . import logger
 from .processing import ProcessingMixins
-from .utils import BITPIX_DICT, generate_random_table_values, get_excel_sheet
+from .utils import (
+    BITPIX_DICT,
+    generate_random_bintable_values,
+    generate_random_table_values,
+    get_excel_sheet,
+)
 
 __all__ = ["FITSTemplateException", "FITSValueException", "PandoraHDUList"]
+
+SKIPKWS = ["COMMENT", "CHECKSUM", "DATASUM"]
 
 
 class FITSTemplateException(Exception):
@@ -29,7 +36,7 @@ class FITSValueException(Exception):
 def _clean_header_cards(hdr: fits.Header):
     """Cleans the list of cards to ensure they have reasonable values."""
     for key in hdr:
-        if key == "COMMENT":
+        if key in SKIPKWS:
             continue
         if hdr[key] in ["TRUE", "True", "T"]:
             hdr[key] = True
@@ -53,6 +60,11 @@ def _clean_header_cards(hdr: fits.Header):
 
 class PandoraHDUList(fits.HDUList, ProcessingMixins):
     """Base class, not designed to be used. Adds mixins to the fits.HDUList object"""
+
+    def __repr__(self):
+        return f"Pandora {self.__class__.__name__}:\n\t" + "\n\t".join(
+            super().__repr__()[1:-1].replace(", ", ",").split(",")
+        )
 
     def _get_default_cards(self, extname):
         if isinstance(extname, int):
@@ -132,7 +144,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 fits.Header(self._get_mandetory_cards(extname))
             )
             for key in expected_header:
-                if key == "COMMENT":
+                if key in SKIPKWS:
                     continue
                 # fill missing cards
                 if key not in hdr:
@@ -163,7 +175,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 fits.Header(self._get_mandetory_cards(extname))
             )
             for key in hdr:
-                if key == "COMMENT":
+                if key in SKIPKWS:
                     continue
                 if key not in expected_header:
                     if warn:
@@ -240,6 +252,27 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 ]
 
                 hdu = fits.TableHDU.from_columns(columns, header=hdr)
+            elif exttype == "BinTableHDU":
+                ncolumns = len(
+                    [c.keyword for c in cards if c.keyword.startswith("TTYPE")]
+                )
+                columns = [
+                    fits.Column(
+                        name=hdr[f"TTYPE{idx}"],
+                        format=hdr[f"TFORM{idx}"],
+                        unit=hdr[f"TUNIT{idx}"] if f"TUNIT{idx}" in hdr else "",
+                        array=(
+                            generate_random_bintable_values(
+                                hdr[f"TFORM{idx}"], hdr["NAXIS2"]
+                            )
+                            if hdr["NAXIS2"] != ""
+                            else None
+                        ),
+                    )
+                    for idx in np.arange(1, ncolumns + 1)
+                ]
+
+                hdu = fits.BinTableHDU.from_columns(columns, header=hdr)
             else:
                 raise FITSValueException(
                     f"[EXT {hdr['EXTNAME']}] No extension type {exttype}."
@@ -249,7 +282,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
             hdulist.append(hdu)
         return fits.HDUList(hdulist)
 
-    def __init__(self, file=None, validate=True, warn=False):
+    def __init__(self, file=None, validate=True, warn=True):
         self.warn = warn
         self.structure = get_excel_sheet(self.filename, 0)
         # load in header formats
@@ -270,6 +303,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         self.extension_types = np.asarray(self.structure.Type.values)
 
         if file is None:
+            logger.warning("Creating a dummy file.")
             hdulist = self._get_dummy_hdus()
             super().__init__(hdulist)
         elif isinstance(file, str):
@@ -290,13 +324,11 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         overwrite=False,
         checksum=False,
     ):
-        self.__class__(
-            fits.HDUList(self).writeto(
-                fileobj=fileobj,
-                output_verify=output_verify,
-                overwrite=overwrite,
-                checksum=checksum,
-            )
+        fits.HDUList(self).writeto(
+            fileobj=fileobj,
+            output_verify=output_verify,
+            overwrite=overwrite,
+            checksum=checksum,
         )
 
     def copy(self):

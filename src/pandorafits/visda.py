@@ -3,10 +3,15 @@ import pandoraaperture as pa
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
+import astropy.units as u
+import matplotlib.pyplot as plt
+import pandas as pd
 
 from . import FORMATSDIR, VISDAReference, logger
 from .fits import PandoraHDUList
 from .reshape import list_to_panels, panels_to_cube, panels_to_list
+from .report import ReportMixins
+from .io import register_hdulist
 
 __all__ = [
     "VISDAFFILevel0HDUList",
@@ -17,9 +22,20 @@ __all__ = [
 ]
 
 
-class VISDALevel0HDUList(PandoraHDUList):
+@register_hdulist(
+    lambda h: h
+    and (
+        (h[0].header.get("TELESCOP") == "NASA Pandora")
+        & (h[0].header.get("INSTRMNT") == "VISDA")
+        & ("FRMPCOAD" in h[0].header)
+        & ("PFCLASS" not in h[0].header)
+    )
+)
+class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
     filename = FORMATSDIR + "visda/level0_visda.xlsx"
     reference = VISDAReference
+    level = 0
+    instrument = "VISDA"
 
     @property
     def border(self):
@@ -40,7 +56,7 @@ class VISDALevel0HDUList(PandoraHDUList):
         roistrty = self[0].header["ROISTRTY"]
         return [
             (y + roistrty, x + roistrtx)
-            for x, y in Table(self[2].data).to_pandas().values
+            for x, y in Table(self["ROI_TABLE"].data).to_pandas().values
         ]
 
     @property
@@ -55,70 +71,9 @@ class VISDALevel0HDUList(PandoraHDUList):
     def data_cube(self):
         return panels_to_cube(self[1].data, nROI=self.nROI, ROI_size=self.ROI_size)
 
-    #     numSubFrms = int(np.ceil(np.sqrt(self.nROI)))
-    #     dims = (numSubFrms * self.ROI_size[0], numSubFrms * self.ROI_size[1])
-    #     if self[1].header["NAXIS1"] == dims[0]:
-    #         ex = 0
-    #     elif self[1].header["NAXIS1"] == (dims[0] + numSubFrms + 1):
-    #         ex = 1
-    #     else:
-    #         raise ValueError("Can not parse the padding dimensions.")
-    #     data = self[1].data[:, ex:, ex:]
-    #     shape = data.shape[1:]
-    #     width = self.ROI_size[0]
-    #     nims = int(shape[1] / (width + ex))
-    #     d1 = np.asarray(np.array_split(data, nims, axis=2))
-    #     nims = int(shape[0] / (width + ex))
-    #     d2 = np.asarray(np.array_split(d1, nims, axis=2))[
-    #         :, :, :, :-ex, :-ex
-    #     ].transpose([2, 0, 1, 3, 4])
-    #     return d2
-
     @property
     def data_list(self):
         return panels_to_list(self[1].data, nROI=self.nROI, ROI_size=self.ROI_size)
-        # d = self.data_cube[:, ::-1]
-        # starlist = []
-        # numSubFrms = int(np.ceil(np.sqrt(self.nROI)))
-        # for idx in range(numSubFrms):
-        #     for jdx in range(numSubFrms):data.sha
-        #         if (idx * numSubFrms + jdx) == self.nROI:
-        #             break
-        #         starlist.append(d[:, idx, jdx])
-        # return np.asarray(starlist, dtype=starlist[0].dtype).transpose([1, 0, 2, 3])
-
-    def data_list_to_panels(self, data_list):
-        return list_to_panels(data_list, border=self.border)
-        # numSubFrms = int(np.ceil(np.sqrt(self.nROI)))
-        # dims = (numSubFrms * self.ROI_size[0], numSubFrms * self.ROI_size[1])
-        # if self[1].header["NAXIS1"] == dims[0]:
-        #     ex = 0
-        # elif self[1].header["NAXIS1"] == (dims[0] + numSubFrms + 1):
-        #     ex = 1
-        # else:
-        #     raise ValueError("Can not parse the padding dimensions.")
-        # width = self.ROI_size[0]
-        # data = np.zeros(
-        #     (
-        #         self.nframes,
-        #         (width + ex) * numSubFrms + ex,
-        #         (width + ex) * numSubFrms + ex,
-        #     ),
-        #     dtype=star_list.dtype,
-        # )
-        # for idx in range(numSubFrms):
-        #     for jdx in range(numSubFrms):
-        #         if (idx * numSubFrms + jdx) == self.nROI:
-        #             break
-        #         kdx = numSubFrms - 1 - idx
-        #         data[
-        #             :,
-        #             (ex + idx * ex) + (idx * width) : (ex + idx * ex)
-        #             + ((idx + 1) * width),
-        #             (ex + jdx * ex) + (jdx * width) : (ex + jdx * ex)
-        #             + ((jdx + 1) * width),
-        #         ] = star_list[:, kdx * numSubFrms + jdx]
-        # return data
 
     @property
     def list_row(self):
@@ -170,13 +125,91 @@ class VISDALevel0HDUList(PandoraHDUList):
                     star += 1
         return mask
 
+    def plot_data(self, ax=None, **kwargs):
+        if ax is None:
+            _, ax = plt.subplots()
+        d = self["science"].data[0]
+        k = d != 0
+        vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1))
+        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1) + 100)
+        im = ax.pcolormesh(d, vmin=vmin, vmax=vmax, **kwargs)
+        ax.set(
+            aspect="equal",
+            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
+            xlabel="Panel Column",
+            ylabel="Panel Row",
+        )
+        plt.colorbar(im, ax=ax)
+        # ax.margins(0)
+        return ax
+
+    def plot_astrometry(self, ax=None, **kwargs):
+        if ax is None:
+            _, ax = plt.subplots()
+        t = Table(self["temp_time"].data).to_pandas()
+        d = Table(self["astrometry"].data).to_pandas()
+        ax.plot(
+            t.ExposureStartTime_us.values / 1e3,
+            (d.RightAscension.values - d.RightAscension.mean()) * 3600,
+            label="RA",
+        )
+        ax.plot(
+            t.ExposureStartTime_us.values / 1e3,
+            (d.Declination.values - d.Declination.mean()) * 3600,
+            label="Dec",
+        )
+        ax.legend()
+        ax.set(
+            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
+            xlabel="Time in Exposure [s]",
+            ylabel="Position - Mean Position [arcsecond]",
+        )
+        return ax
+
+    def describe(self):
+        keys = [
+            "NUMSTARS",
+            "TARG_ID",
+            "TARG_RA",
+            "TARG_DEC",
+            "FRMSREQD",
+            "FRMSCLCT",
+            "NUMSTARS",
+            "STARDIMS",
+            "NUMPCOAD",
+            "FRMPCOAD",
+        ]
+
+        hdr = self[0].header
+        df = pd.DataFrame(
+            np.asarray([hdr.cards[key] for key in keys]),
+            columns=["Key", "Value", "Comment"],
+        ).set_index("Key")
+        return df
+
+    def get_report_materials(self):
+        return [
+            lambda ax=None: self.plot_data(ax=ax),
+            lambda ax=None: self.plot_astrometry(ax=ax),
+            None,
+            lambda ax=None: self.plot_description(ax=ax),
+        ]
+
     def __to_l1__(self):
         return VISDALevel1HDUList(self)
 
 
+@register_hdulist(
+    lambda h: h
+    and (
+        (h[0].header.get("TELESCOP") == "NASA Pandora")
+        & (h[0].header.get("INSTRMNT") == "VISDA")
+        & (h[0].header.get("PFCLASS") == "VISDALevel1HDUList")
+    )
+)
 class VISDALevel1HDUList(VISDALevel0HDUList):
     filename = FORMATSDIR + "visda/level1_visda.xlsx"
-    reference = VISDAReference
+    level = 1
 
     def split(self):
         if self[0].header["NUMSTARS"] == 1:
@@ -253,7 +286,7 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
         aperturehdu = fits.CompImageHDU(
             data=list_to_panels(
                 aper if aper.ndim == 4 else aper[:, None, :, :], border=self.border
-            ).astype(int),
+            ).astype(np.int16),
             name="APERTURE",
             header=hdr,
         )
@@ -290,26 +323,92 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
         return VISDALevel2HDUList(self)
 
 
+@register_hdulist(
+    lambda h: h
+    and (
+        (h[0].header.get("TELESCOP") == "NASA Pandora")
+        & (h[0].header.get("INSTRMNT") == "VISDA")
+        & (h[0].header.get("PFCLASS") == "VISDALevel2HDUList")
+    )
+)
 class VISDALevel2HDUList(VISDALevel1HDUList):
     filename = FORMATSDIR + "visda/level2_visda.xlsx"
-    reference = VISDAReference
+    level = 2
 
 
-class VISDAFFILevel0HDUList(PandoraHDUList):
+@register_hdulist(
+    lambda h: h
+    and (
+        (h[0].header.get("TELESCOP") == "NASA Pandora")
+        & (h[0].header.get("INSTRMNT") == "VISDA")
+        & ("FRMPCOAD" not in h[0].header)
+        & ("PFCLASS" not in h[0].header)
+    )
+)
+class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
     filename = FORMATSDIR + "visda/level0-ffi_visda.xlsx"
     reference = VISDAReference
+    level = 0
+    instrument = "VISDA"
+
+    def plot_data(self, ax=None, **kwargs):
+        if ax is None:
+            _, ax = plt.subplots()
+        d = self["science"].data[0]
+        k = d != 0
+        vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1))
+        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1) + 100)
+        im = ax.pcolormesh(d, vmin=vmin, vmax=vmax, **kwargs)
+        ax.set(
+            aspect="equal",
+            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
+            xlabel="Column",
+            ylabel="Row",
+        )
+        plt.colorbar(im, ax=ax)
+        # ax.margins(0)
+        return ax
+
+    def describe(self):
+        keys = [
+            "TARG_ID",
+        ]
+
+        hdr = self[0].header
+        df = pd.DataFrame(
+            np.asarray([hdr.cards[key] for key in keys]),
+            columns=["Key", "Value", "Comment"],
+        ).set_index("Key")
+        return df
+
+    def get_report_materials(self):
+        return [
+            lambda ax=None: self.plot_data(ax=ax),
+            None,
+            None,
+            lambda ax=None: self.plot_description(ax=ax),
+        ]
 
     def __to_l1__(self):
         return VISDAFFILevel1HDUList(self)
 
 
+@register_hdulist(
+    lambda h: h
+    and (
+        (h[0].header.get("TELESCOP") == "NASA Pandora")
+        & (h[0].header.get("INSTRMNT") == "VISDA")
+        & (h[0].header.get("PFCLASS") == "VISDAFFILevel1HDUList")
+    )
+)
 class VISDAFFILevel1HDUList(VISDAFFILevel0HDUList):
     filename = FORMATSDIR + "visda/level1-ffi_visda.xlsx"
+    level = 1
 
     def get_scene(self):
         hdr = self[0].header
         prf = pa.SpatialPRF.from_reference()
-        prf.imcorner = (hdr["ROISTRTX"], hdr["ROISTRTY"])
+        prf.imcorner = (hdr["ROISTRTY"], hdr["ROISTRTX"])
         prf.imshape = (hdr["ROISIZEY"], hdr["ROISIZEX"])
         scene = pa.SkyScene(prf, self.wcs, self.start_time)
         return scene
@@ -321,7 +420,9 @@ class VISDAFFILevel1HDUList(VISDAFFILevel0HDUList):
         self.append(scene.get_prf_hdu())
         self.append(
             scene.get_aperture_hdu(
-                SkyCoord(hdr["targ_ra"], hdr["targ_dec"], unit="deg")
+                SkyCoord(hdr["targ_ra"], hdr["targ_dec"], unit="deg"),
+                relative_threshold=0.005,
+                absolute_threshold=50,
             )
         )
         self[0].header["GAIA_ID"] = self["APERTURE"].header["GAIA_ID"]
@@ -331,5 +432,14 @@ class VISDAFFILevel1HDUList(VISDAFFILevel0HDUList):
         return VISDAFFILevel2HDUList(self)
 
 
+@register_hdulist(
+    lambda h: h
+    and (
+        (h[0].header.get("TELESCOP") == "NASA Pandora")
+        & (h[0].header.get("INSTRMNT") == "VISDA")
+        & (h[0].header.get("PFCLASS") == "VISDAFFILevel2HDUList")
+    )
+)
 class VISDAFFILevel2HDUList(VISDAFFILevel1HDUList):
     filename = FORMATSDIR + "visda/level2-ffi_visda.xlsx"
+    level = 2
