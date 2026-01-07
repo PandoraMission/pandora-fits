@@ -159,93 +159,6 @@ class Level1DataBase(FileDataBaseMixins, DataBaseMixins):
             chunk=chunk,
         )
 
-    # def _is_bad_value(
-    #     self, fname, expected_entry, entry, name, level, remove_bad_entries=True
-    # ):
-    #     if expected_entry != entry:
-    #         logger.warning(
-    #             f"File {fname} exists in Level {level} database with `{name}` set to `{entry}` requested value was `{expected_entry}`."
-    #         )
-    #         if remove_bad_entries:
-    #             if level == 0:
-    #                 self.cur.execute(
-    #                     "DELETE FROM level0.pointings WHERE filename=?", (fname,)
-    #                 )
-    #             if level == self.level:
-    #                 self.cur.execute("DELETE FROM pointings WHERE filename=?", (fname,))
-    #             else:
-    #                 raise ValueError(f"Can not parse usage of level `{level}`")
-    #             self.conn.commit()
-    #             logger.warning(f"File {fname} removed from Level {level} database.")
-    #         return True
-    #     return False
-
-    # def _is_bad_row(
-    #     self,
-    #     filename,
-    #     crsoftver=CRSOFTVER,
-    #     pfsoftver=__version__,
-    #     badchecksum=0,
-    #     baddatasum=0,
-    #     level=0,
-    #     remove_bad_entries=False,
-    # ):
-    #     fname = filename.split("/")[-1] if "/" in filename else filename
-    #     self.cur.execute(
-    #         f"SELECT crsoftver, pfsoftver, badchecksum, baddatasum FROM {'level0.' if level == 0 else ''}pointings WHERE filename=?",
-    #         (fname,),
-    #     )
-    #     row = self.cur.fetchone()
-
-    #     if row is None:
-    #         return False
-    #     (
-    #         database_crsoftver,
-    #         database_pfsoftver,
-    #         database_badchecksum,
-    #         database_baddatasum,
-    #     ) = row
-    #     is_bad_row = False
-    #     # Log any discrepancies
-    #     if crsoftver is not None:
-    #         is_bad_row |= self._is_bad_value(
-    #             fname=fname,
-    #             expected_entry=crsoftver,
-    #             entry=database_crsoftver,
-    #             name="CRSOFTV",
-    #             level=0,
-    #             remove_bad_entries=remove_bad_entries,
-    #         )
-    #     if pfsoftver is not None:
-    #         if database_pfsoftver is not None:
-    #             is_bad_row |= self._is_bad_value(
-    #                 fname=fname,
-    #                 expected_entry=pfsoftver,
-    #                 entry=database_pfsoftver,
-    #                 name="PFSOFTV",
-    #                 level=0,
-    #                 remove_bad_entries=remove_bad_entries,
-    #             )
-    #     if badchecksum is not None:
-    #         is_bad_row |= self._is_bad_value(
-    #             fname=fname,
-    #             expected_entry=badchecksum,
-    #             entry=database_badchecksum,
-    #             name="badchecksum",
-    #             level=0,
-    #             remove_bad_entries=remove_bad_entries,
-    #         )
-    #     if baddatasum is not None:
-    #         is_bad_row |= self._is_bad_value(
-    #             fname=fname,
-    #             expected_entry=baddatasum,
-    #             entry=database_baddatasum,
-    #             name="baddatasum",
-    #             level=0,
-    #             remove_bad_entries=remove_bad_entries,
-    #         )
-    #     return is_bad_row
-
     def check_filename_in_database(self, filename, level=0):
         fname = filename.split("/")[-1] if "/" in filename else filename
         self.cur.execute(
@@ -253,18 +166,6 @@ class Level1DataBase(FileDataBaseMixins, DataBaseMixins):
             (fname,),
         )
         return self.cur.fetchone() is not None
-
-    # def files_to_process(self, crsoftver=CRSOFTVER, nchunks=1, chunknumber=1):
-    #     cur = self.conn.cursor()
-    #     cur.execute("SELECT filename, dir FROM level0.pointings")
-
-    #     row = cur.fetchone()
-    #     while row is not None:
-    #         if (not self.check_filename_in_database(row[0], level=self.level)) & (
-    #             not self._is_bad_row(row[0], crsoftver=crsoftver, level=0)
-    #         ):
-    #             yield (f"{row[1]}/{row[0]}")
-    #         row = cur.fetchone()
 
     def get_entry(self, filename):
         fname = filename.split("/")[-1] if "/" in filename else filename
@@ -309,16 +210,24 @@ class Level1DataBase(FileDataBaseMixins, DataBaseMixins):
         suffix = fname.split(".")[-1]
         return f"{self.level_dir}/{t.year}/{t.month}/{t.day}/{get_dpc_hashkey(targ_id, targ_ra, targ_dec)}/{fname_no_suffix}_v{__version__.replace('.', '-')}_l{self.level}.{suffix}"
 
+    def _get_filemap(self):
+        from ..visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
+        from ..nirda import NIRDALevel0HDUList
+
+        filemap = {
+            "VisSci": VISDALevel0HDUList,
+            "VisImg": VISDAFFILevel0HDUList,
+            "InfImg": NIRDALevel0HDUList,
+        }
+
+        return filemap
+
     def process(self, filename, **kwargs):
         logger.info(f"Processing {filename} to Level {self.level}.")
         logger.info("Ensuring file directory present.")
         path = self.get_output_filename(filename)
         os.makedirs("/".join(path.split("/")[:-1]), exist_ok=True)
-        filemap = {
-            "VisSci": globals()[f"VISDALevel{self.level - 1}HDUList"],
-            "VisImg": globals()[f"VISDAFFILevel{self.level - 1}HDUList"],
-            "InfImg": globals()[f"NIRDALevel{self.level - 1}HDUList"],
-        }
+        filemap = self._get_filemap()
         for key, HDUList in filemap.items():
             if key in filename:
                 with HDUList(filename) as hdulist:
@@ -326,20 +235,6 @@ class Level1DataBase(FileDataBaseMixins, DataBaseMixins):
                     hdulist.writeto(path, overwrite=True, checksum=True)
         logger.info(f"Wrote {filename.split('/')[-1]} to {path}")
         return self.get_entry(filename)
-
-    # def crawl_and_process_parallel(self, max_workers=16, crsoftver=CRSOFTVER):
-    #     paths = list(self.files_to_process(crsoftver=crsoftver))
-    #     for path in paths:
-    #         out_path = self.get_output_filename(path)
-    #         os.makedirs("/".join(out_path.split("/")[:-1]), exist_ok=True)
-    #     rows = []
-    #     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-    #         futures = [ex.submit(self.process, p) for p in paths]
-    #         for fut in as_completed(futures):
-    #             row = fut.result()
-    #             if row is not None:
-    #                 rows.append(row)
-    #     self.add_entries(rows)
 
     def crawl_and_process(self, crsoftver=CRSOFTVER, nchunks=None, chunk=None):
         paths = self.get_files_to_process(
@@ -362,17 +257,3 @@ class Level1DataBase(FileDataBaseMixins, DataBaseMixins):
                 logger.exception(
                     f"Error while increasing Level {self.level - 1} to Level {self.level} [{path}]. Skipping."
                 )
-
-    # def crawl_and_process_parallel(self, max_workers=16, crsoftver=CRSOFTVER):
-    #     paths = list(self.files_to_process(crsoftver=crsoftver))
-    #     for path in paths:
-    #         out_path = self.get_output_filename(path)
-    #         os.makedirs("/".join(out_path.split("/")[:-1]), exist_ok=True)
-    #     rows = []
-    #     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-    #         futures = [ex.submit(self.process, p) for p in paths]
-    #         for fut in as_completed(futures):
-    #             row = fut.result()
-    #             if row is not None:
-    #                 rows.append(row)
-    #     self.add_entries(rows)

@@ -12,6 +12,7 @@ from .fits import PandoraHDUList
 from .reshape import list_to_panels, panels_to_cube, panels_to_list
 from .report import ReportMixins
 from .io import register_hdulist
+from .scene import get_VISDAFFI_scene, get_VISDA_scene
 
 __all__ = [
     "VISDAFFILevel0HDUList",
@@ -226,29 +227,15 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
         return hdulists
 
     def get_scene(self):
-        if self[0].header["NUMSTARS"] == 1:
-            prf = pa.SpatialPRF.from_reference().to_PRF(
-                np.asarray(self.ROI_corners[0]) + np.asarray(self.ROI_size) / 2
-            )
-            prf.imcorner = self.ROI_corners[0]
-            prf.imshape = self.ROI_size
-            scene = pa.SkyScene(prf, self.wcs, self.start_time)
-        else:
-            prf = pa.SpatialPRF.from_reference()
-            prf.imcorner = (0, 0)
-            prf.imshape = (2048, 2048)
-            corners = [
-                tuple(i) for i in np.asarray(self.ROI_corners)
-            ]  # + np.asarray((hdr['ROISTRTX'], hdr['ROISTRTY']))]
-            scene = pa.ROISkyScene(
-                prf,
-                self.wcs,
-                time=self.start_time,
-                nROIs=self.nROI,
-                ROI_size=self.ROI_size,
-                ROI_corners=corners,
-            )
-        return scene
+        hdr = self[0].header
+        return get_VISDA_scene(
+            time_jd=self.sequence_start_time.jd,
+            ra=hdr["TARG_RA"],
+            dec=hdr["TARG_DEC"],
+            roll=hdr["TARG_RLL"],
+            ROI_corners=tuple(self.ROI_corners),
+            ROI_size=self.ROI_size,
+        )
 
     def _get_aperture_and_catalog(self, scene):
         cataloghdu = scene.get_catalog_hdu()
@@ -407,11 +394,16 @@ class VISDAFFILevel1HDUList(VISDAFFILevel0HDUList):
 
     def get_scene(self):
         hdr = self[0].header
-        prf = pa.SpatialPRF.from_reference()
-        prf.imcorner = (hdr["ROISTRTY"], hdr["ROISTRTX"])
-        prf.imshape = (hdr["ROISIZEY"], hdr["ROISIZEX"])
-        scene = pa.SkyScene(prf, self.wcs, self.start_time)
-        return scene
+        imcorner = (hdr["ROISTRTY"], hdr["ROISTRTX"])
+        imshape = (hdr["ROISIZEY"], hdr["ROISIZEX"])
+        return get_VISDAFFI_scene(
+            time_jd=self.sequence_start_time.jd,
+            ra=hdr["TARG_RA"],
+            dec=hdr["TARG_DEC"],
+            roll=hdr["TARG_RLL"],
+            imcorner=imcorner,
+            imshape=imshape,
+        )
 
     def _append_scene_extensions(self):
         hdr = self[0].header

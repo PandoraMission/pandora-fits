@@ -17,11 +17,14 @@ from .database import AstrometryDataBase
 class ProcessingMixins:
     @property
     def wcs(self):
-        return [
-            WCS(self[idx].header[3:])
-            for idx in range(len(self))
-            if "WCSAXES" in self[idx].header
-        ][0]
+        if np.any(["WCSAXES" in self[idx].header for idx in range(len(self))]):
+            return [
+                WCS(self[idx].header[3:])
+                for idx in range(len(self))
+                if "WCSAXES" in self[idx].header
+            ][0]
+        else:
+            return None
 
     @property
     def start_time(self):
@@ -34,6 +37,14 @@ class ProcessingMixins:
             )
         ).utc
         return time
+
+    @property
+    def sequence_start_time(self):
+        """Given Pandora HDUList obtains the detector time in TAI."""
+        if "SEQSTART" in self[0].header:
+            return Time(self[0].header["SEQSTART"], format="jd")
+        else:
+            return self.start_time
 
     @property
     def pixel_coordinates(self):
@@ -195,6 +206,9 @@ class ProcessingMixins:
         return
 
     def to_level1(self, upcast=True, **kwargs):
+        if self.level >= 1:
+            raise ValueError("This is a Level 1 Product.")
+
         new = self.copy()
         new[0].header["PFSOFTV"] = __version__
 
@@ -228,8 +242,12 @@ class ProcessingMixins:
                 logger.warning("This file seems to cover multiple targets/pointings.")
             # This should select the most common target ID in the case of many target IDs
             targ_id = df.targ_id.mode()[0]
+            dpc_obs_id = df.dpc_obs_id.mode()[0]
+            start = df.start.mode()[0]
         else:
             targ_id = "unknown"
+            dpc_obs_id = "unknown"
+            start = 0
 
         update_attr(
             "TARG_RA",
@@ -251,7 +269,16 @@ class ProcessingMixins:
             targ_id,
             "Target ID/keyword",
         )
-
+        update_attr(
+            "DPCOBSID",
+            dpc_obs_id,
+            "DPC Observation ID",
+        )
+        update_attr(
+            "SEQSTART",
+            start,
+            "DPC Observation Sequence Start",
+        )
         # This header keyword set isn't fitting in FITS conventions so we're renaming them if present.
         # We switch it out to "UNIT"
         for key in ["TTYPE1", "TFORM1", "TUNIT1"]:
@@ -284,7 +311,7 @@ class ProcessingMixins:
         return new
 
     def to_level2(self, upcast=True, **kwargs):
-        if "2" in self.__class__.__name__:
+        if self.level >= 2:
             raise ValueError("This is a Level 2 Product.")
         new = self.copy()
         new[1] = fits.CompImageHDU(new[1].data.astype(float), header=new[1].header)

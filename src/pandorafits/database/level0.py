@@ -188,25 +188,6 @@ class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
             self.add_entries(rows)
         self.update_pointings()
 
-    # def crawl_and_add_parallel(self, root, max_workers=16):
-    #     for image_type in ["InfImg", "VisSci", "VisImg"]:
-    #         # for path in Path(root).rglob(f"*{image_type}*.fits"):
-    #         #     self.add_entry(self.get_entry(str(path)))
-    #         paths = [
-    #             str(path)
-    #             for path in Path(root).rglob(f"*{image_type}*.fits")
-    #             if not self.check_filename_in_database(str(path))
-    #         ]
-    #         rows = []
-    #         with ThreadPoolExecutor(max_workers=max_workers) as ex:
-    #             futures = [ex.submit(self.get_entry, p) for p in paths]
-    #             for fut in as_completed(futures):
-    #                 row = fut.result()
-    #                 if row is not None:
-    #                     rows.append(row)
-    #         self.add_entries(rows)
-    #     self.update_pointings()
-
     def _update_dpc_obs_id(self):
         sql = f"""
         WITH changes AS (

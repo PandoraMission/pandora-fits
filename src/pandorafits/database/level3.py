@@ -42,23 +42,14 @@ class Level3DataBase(Level1DataBase, FileDataBaseMixins, DataBaseMixins):
         t = Time(row[1], format="jd").to_datetime()
         return f"{self.level_dir}/{t.year}/{t.month}/{t.day}/{get_dpc_hashkey(row[0], row[2], row[3])}/{Time(row[1], format='jd').strftime('%Y-%m-%d__%H-%M-%S')}_{row[0]}_v{__version__.replace('.', '-')}_l3.fits"
 
-    # def process(self, filename):
-    #     logger.info(f"Processing {filename} to Level {self.level}.")
-    #     logger.info("Ensuring file directory present.")
-    #     path = self.get_output_filename(filename)
-    #     os.makedirs("/".join(path.split("/")[:-1]), exist_ok=True)
-    #     # Somehow write data to the level 3 file here...
-    #     # if "VisSci" in filename:
-    #     #     with VISDALevel0HDUList(filename) as hdulist:
-    #     #         hdulist = getattr(hdulist, f"to_level{self.level}")()
-    #     #         hdulist.writeto(path, overwrite=True, checksum=True)
-    #     # if "InfImg" in filename:
-    #     #     with NIRDALevel0HDUList(filename) as hdulist:
-    #     #         hdulist = getattr(hdulist, f"to_level{self.level}")()
-    #     #         hdulist.writeto(path, overwrite=True, checksum=True)
-    #     if "VisImg" in filename:
-    #         # VisImg are full frame images, they don't go into our level 3 products.
-    #         logger.warning("Can not process VisImg to Level 3. Will skip this file.")
-    #         return None
-    #     logger.info(f"Wrote {filename.split('/')[-1]} to {path}")
-    #     return self.get_entry(filename)
+    def _get_filemap(self):
+        from ..visda import VISDAFFILevel2HDUList, VISDALevel2HDUList
+        from ..nirda import NIRDALevel2HDUList
+
+        filemap = {
+            "VisSci": VISDALevel2HDUList,
+            "VisImg": VISDAFFILevel2HDUList,
+            "InfImg": NIRDALevel2HDUList,
+        }
+
+        return filemap

@@ -17,25 +17,14 @@ class Level2DataBase(Level1DataBase, FileDataBaseMixins, DataBaseMixins):
         super().__init__()
         self.cur.execute(f"ATTACH DATABASE '{LEVEL1_DIR}/level1.db' AS level1")
 
-    # def process(self, filename):
-    #     logger.info(f"Processing {filename} to Level {self.level}.")
-    #     logger.info("Ensuring file directory present.")
-    #     path = self.get_output_filename(filename)
-    #     os.makedirs("/".join(path.split("/")[:-1]), exist_ok=True)
-    #     if "VisSci" in filename:
-    #         with VISDALevel1HDUList(filename) as hdulist:
-    #             logger.info(f"Converting {filename.split('/')[-1]} to Level 2 product.")
-    #     #         hdulist = getattr(hdulist, f"to_level{self.level}")()
-    #     #         hdulist.writeto(path, overwrite=True, checksum=True)
-    #     if "VisImg" in filename:
-    #         with VISDAFFILevel1HDUList(filename) as hdulist:
-    #             logger.info(f"Converting {filename.split('/')[-1]} to Level 2 product.")
-    #     #         hdulist = getattr(hdulist, f"to_level{self.level}")()
-    #     #         hdulist.writeto(path, overwrite=True, checksum=True)
-    #     if "InfImg" in filename:
-    #         with NIRDALevel1HDUList(filename) as hdulist:
-    #             logger.info(f"Converting {filename.split('/')[-1]} to Level 2 product.")
-    #     #         hdulist = getattr(hdulist, f"to_level{self.level}")()
-    #     #         hdulist.writeto(path, overwrite=True, checksum=True)
-    #     logger.info(f"Wrote {filename.split('/')[-1]} to {path}")
-    #     return self.get_entry(filename)
+    def _get_filemap(self):
+        from ..visda import VISDAFFILevel1HDUList, VISDALevel1HDUList
+        from ..nirda import NIRDALevel1HDUList
+
+        filemap = {
+            "VisSci": VISDALevel1HDUList,
+            "VisImg": VISDAFFILevel1HDUList,
+            "InfImg": NIRDALevel1HDUList,
+        }
+
+        return filemap

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandoraaperture as pa
 from . import logger
+from .scene import get_NIRDA_scene
 from astropy.coordinates import SkyCoord
 
 __all__ = [
@@ -62,13 +63,26 @@ class NIRDALevel1HDUList(NIRDALevel0HDUList):
     filename = FORMATSDIR + "nirda/level1_nirda.xlsx"
     level = 1
 
+    # def get_scene(self):
+    #     hdr = self[0].header
+    #     prf = pa.DispersedPRF.from_reference()
+    #     prf.imcorner = (hdr["ROISTRTY"], hdr["ROISTRTX"])
+    #     prf.imshape = (hdr["ROISIZEY"], hdr["ROISIZEX"])
+    #     scene = pa.DispersedSkyScene(prf, self.wcs, self.start_time)
+    #     return scene
+
     def get_scene(self):
         hdr = self[0].header
-        prf = pa.DispersedPRF.from_reference()
-        prf.imcorner = (hdr["ROISTRTY"], hdr["ROISTRTX"])
-        prf.imshape = (hdr["ROISIZEY"], hdr["ROISIZEX"])
-        scene = pa.DispersedSkyScene(prf, self.wcs, self.start_time)
-        return scene
+        imcorner = (hdr["ROISTRTY"], hdr["ROISTRTX"])
+        imshape = (hdr["ROISIZEY"], hdr["ROISIZEX"])
+        return get_NIRDA_scene(
+            time_jd=self.sequence_start_time.jd,
+            ra=hdr["TARG_RA"],
+            dec=hdr["TARG_DEC"],
+            roll=hdr["TARG_RLL"],
+            imcorner=imcorner,
+            imshape=imshape,
+        )
 
     def _append_scene_extensions(self):
         hdr = self[0].header
