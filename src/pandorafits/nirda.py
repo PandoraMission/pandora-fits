@@ -6,6 +6,7 @@ import numpy as np
 import pandoraaperture as pa
 from . import logger
 from .scene import get_NIRDA_scene
+from astropy.io import fits
 from astropy.coordinates import SkyCoord
 
 __all__ = [
@@ -89,6 +90,7 @@ class NIRDALevel1HDUList(NIRDALevel0HDUList):
         scene = self.get_scene()
         self.append(scene.get_catalog_hdu())
         self.append(scene.get_prf_hdu())
+        self.append(scene.get_model_hdu())
         self.append(
             scene.get_aperture_hdu(
                 SkyCoord(hdr["targ_ra"], hdr["targ_dec"], unit="deg"),

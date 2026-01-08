@@ -31,25 +31,6 @@ def get_VISDAFFI_scene(time_jd, ra, dec, roll, imcorner, imshape):
 
 
 @lru_cache(maxsize=4)
-def get_NIRDA_scene(time_jd, ra, dec, roll, imcorner, imshape):
-    """Special LRU cached version of a scene so we can reuse it!"""
-    dispersed_prf.imcorner = imcorner
-    dispersed_prf.imshape = imshape
-    scene = pa.DispersedSkyScene(
-        dispersed_prf,
-        NIRDAReference.get_wcs(
-            target_ra=ra,
-            target_dec=dec,
-            theta=roll,
-            distortion=True,
-            yreflect=True,
-        ),
-        Time(time_jd, format="jd"),
-    )
-    return scene
-
-
-@lru_cache(maxsize=4)
 def get_VISDA_scene(time_jd, ra, dec, roll, ROI_size, ROI_corners):
     """Special LRU cached version of a scene so we can reuse it!"""
     if len(ROI_corners) == 1:
@@ -86,4 +67,23 @@ def get_VISDA_scene(time_jd, ra, dec, roll, ROI_size, ROI_corners):
             ROI_size=ROI_size,
             ROI_corners=list(ROI_corners),
         )
+    return scene
+
+
+@lru_cache(maxsize=4)
+def get_NIRDA_scene(time_jd, ra, dec, roll, imcorner, imshape):
+    """Special LRU cached version of a scene so we can reuse it!"""
+    dispersed_prf.imcorner = imcorner
+    dispersed_prf.imshape = imshape
+    scene = pa.DispersedSkyScene(
+        dispersed_prf,
+        NIRDAReference.get_wcs(
+            target_ra=ra,
+            target_dec=dec,
+            theta=roll,
+            distortion=True,
+            yreflect=True,
+        ),
+        Time(time_jd, format="jd"),
+    )
     return scene

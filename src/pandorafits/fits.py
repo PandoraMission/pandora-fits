@@ -13,10 +13,21 @@ from .utils import (
     generate_random_table_values,
     get_excel_sheet,
 )
+from datetime import timedelta
+
+import astropy.units as u
+from astropy.time import Time
+from astropy.wcs import WCS
+from astropy.coordinates import SkyCoord
+
 
 __all__ = ["FITSTemplateException", "FITSValueException", "PandoraHDUList"]
 
-SKIPKWS = ["COMMENT", "CHECKSUM", "DATASUM"]
+SKIPKWS = [
+    "COMMENT",
+    "CHECKSUM",
+    "DATASUM",
+]
 
 
 class FITSTemplateException(Exception):
@@ -181,7 +192,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                     if warn:
                         hdr.pop(key)
                         logger.warning(
-                            f"Key {key} found in extension `{extname}` but not expected. Removed this key."
+                            f"[EXT {hdr['EXTNAME']}] {key} found in extension `{extname}` header but not expected. Removed this key."
                         )
                     else:
                         raise FITSTemplateException(
@@ -333,3 +344,109 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
 
     def copy(self):
         return self.__class__(super().copy())
+
+    @property
+    def targ(self):
+        if "TARG_RA" in self[0].header:
+            return SkyCoord(
+                self[0].header["TARG_RA"], self[0].header["TARG_DEC"], unit="deg"
+            )
+        else:
+            return None
+
+    @property
+    def wcs(self):
+        if np.any(["WCSAXES" in self[idx].header for idx in range(len(self))]):
+            return [
+                WCS(self[idx].header[3:])
+                for idx in range(len(self))
+                if "WCSAXES" in self[idx].header
+            ][0]
+        else:
+            return None
+
+    @property
+    def start_time(self):
+        """Given Pandora HDUList obtains the detector time in TAI."""
+        time = (
+            Time("2000-01-01 12:00:00", scale="tai")
+            + timedelta(
+                seconds=self[0].header["CORSTIME"],
+                milliseconds=self[0].header["FINETIME"] / 1e6,
+            )
+        ).utc
+        return time
+
+    @property
+    def sequence_start_time(self):
+        """Given Pandora HDUList obtains the detector time in TAI."""
+        if "SEQSTART" in self[0].header:
+            return Time(self[0].header["SEQSTART"], format="jd")
+        else:
+            return self.start_time
+
+    @property
+    def pixel_coordinates(self):
+        hdr = self[0].header
+        R, C = np.mgrid[
+            hdr["ROISTRTY"] : hdr["ROISTRTY"] + hdr["ROISIZEY"],
+            hdr["ROISTRTX"] : hdr["ROISTRTX"] + hdr["ROISIZEX"],
+        ]
+        return R, C
+
+    @property
+    def row(self):
+        hdr = self[0].header
+        return np.arange(hdr["ROISTRTY"], hdr["ROISTRTY"] + hdr["ROISIZEY"])
+
+    @property
+    def column(self):
+        hdr = self[0].header
+        return np.arange(hdr["ROISTRTX"], hdr["ROISTRTX"] + hdr["ROISIZEX"])
+
+    @property
+    def frame_time(self):
+        if "FRMTIME" in self[0].header:
+            if self[0].header["GRPSAVGD"] == 0:
+                return (u.millisecond * self[0].header["FRMTIME"]).to(u.second)
+            else:
+                return (
+                    u.millisecond * self[0].header["FRMTIME"] * self[0].header["GRPS"]
+                ).to(u.second)
+        elif "EXPTIMEU" in self[0].header:
+            return (
+                u.microsecond
+                * self[0].header["EXPTIMEU"]
+                * self[0].header["FRMSCLCT"]
+                / self[1].header["NAXIS3"]
+            ).to(u.second)
+        elif "EXPTIME" in self[0].header:
+            return (
+                u.microsecond
+                * self[0].header["EXPTIME"]
+                * self[0].header["FRMSCLCT"]
+                / self[1].header["NAXIS3"]
+            ).to(u.second)
+
+    @property
+    def nframes(self):
+        return self[1].header[f"NAXIS{self[1].header['NAXIS']}"]
+
+    @property
+    def ncoadds(self):
+        if "FRMPCOAD" in self[0].header:
+            return self[0].header["FRMPCOAD"]
+        elif self[0].header["INSTRMNT"] == "VISDA":
+            return 1
+        if self[0].header["GRPSAVGD"] == 0:
+            return 1
+        else:
+            return self[0].header["GRPS"]
+
+    @property
+    def end_time(self):
+        return self.start_time + self.nframes * self.frame_time
+
+    def time(self):
+        dt = timedelta(seconds=self.frame_time.to(u.second).value)
+        return (self.start_time + (np.arange(self.nframes) * dt)).jd

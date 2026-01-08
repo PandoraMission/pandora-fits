@@ -1,113 +1,18 @@
 """Functions for processing data"""
 
 from copy import deepcopy
-from datetime import timedelta
 
 import astropy.units as u
 import numpy as np
 from astropy.io import fits
 from astropy.time import Time
-from astropy.wcs import WCS
 from astropy.table import Table
 
-from . import __version__, logger
+from . import __version__, logger, NIRDAReference
 from .database import AstrometryDataBase
 
 
 class ProcessingMixins:
-    @property
-    def wcs(self):
-        if np.any(["WCSAXES" in self[idx].header for idx in range(len(self))]):
-            return [
-                WCS(self[idx].header[3:])
-                for idx in range(len(self))
-                if "WCSAXES" in self[idx].header
-            ][0]
-        else:
-            return None
-
-    @property
-    def start_time(self):
-        """Given Pandora HDUList obtains the detector time in TAI."""
-        time = (
-            Time("2000-01-01 12:00:00", scale="tai")
-            + timedelta(
-                seconds=self[0].header["CORSTIME"],
-                milliseconds=self[0].header["FINETIME"] / 1e6,
-            )
-        ).utc
-        return time
-
-    @property
-    def sequence_start_time(self):
-        """Given Pandora HDUList obtains the detector time in TAI."""
-        if "SEQSTART" in self[0].header:
-            return Time(self[0].header["SEQSTART"], format="jd")
-        else:
-            return self.start_time
-
-    @property
-    def pixel_coordinates(self):
-        hdr = self[0].header
-        R, C = np.mgrid[
-            hdr["ROISTRTY"] : hdr["ROISTRTY"] + hdr["ROISIZEY"],
-            hdr["ROISTRTX"] : hdr["ROISTRTX"] + hdr["ROISIZEX"],
-        ]
-        return R, C
-
-    @property
-    def row(self):
-        hdr = self[0].header
-        return np.arange(hdr["ROISTRTY"], hdr["ROISTRTY"] + hdr["ROISIZEY"])
-
-    @property
-    def column(self):
-        hdr = self[0].header
-        return np.arange(hdr["ROISTRTX"], hdr["ROISTRTX"] + hdr["ROISIZEX"])
-
-    @property
-    def frame_time(self):
-        if "FRMTIME" in self[0].header:
-            return (u.millisecond * self[0].header["FRMTIME"]).to(u.second)
-        elif "EXPTIMEU" in self[0].header:
-            return (
-                u.microsecond
-                * self[0].header["EXPTIMEU"]
-                * self[0].header["FRMSCLCT"]
-                / self[1].header["NAXIS3"]
-            ).to(u.second)
-        elif "EXPTIME" in self[0].header:
-            return (
-                u.microsecond
-                * self[0].header["EXPTIME"]
-                * self[0].header["FRMSCLCT"]
-                / self[1].header["NAXIS3"]
-            ).to(u.second)
-
-    @property
-    def nframes(self):
-        return self[1].header[f"NAXIS{self[1].header['NAXIS']}"]
-
-    @property
-    def ncoadds(self):
-        if "FRMPCOAD" in self[0].header:
-            return self[0].header["FRMPCOAD"]
-        elif self[0].header["INSTRMNT"] == "VISDA":
-            return 1
-        if self[0].header["GRPSAVGD"] == 0:
-            return 1
-        else:
-            logger.warning("Currently missing GROUPS keyword header, check with Lance")
-            return 1
-
-    @property
-    def end_time(self):
-        return self.start_time + self.nframes * self.frame_time
-
-    def time(self):
-        dt = timedelta(seconds=self.frame_time.to(u.second).value)
-        return (self.start_time + (np.arange(self.nframes) * dt)).jd
-
     def _get_reference_detector_image(self, name):
         ref = getattr(self.reference, f"get_{name}")()
         if isinstance(ref, u.Quantity):
@@ -210,6 +115,7 @@ class ProcessingMixins:
             raise ValueError("This is a Level 1 Product.")
 
         new = self.copy()
+
         new[0].header["PFSOFTV"] = __version__
 
         def update_attr(name, value, comment=None):
@@ -247,7 +153,7 @@ class ProcessingMixins:
         else:
             targ_id = "unknown"
             dpc_obs_id = "unknown"
-            start = 0
+            start = 2454833
 
         update_attr(
             "TARG_RA",
@@ -306,6 +212,7 @@ class ProcessingMixins:
         new[0].header["PFCLASS"] = new.__class__.__name__.replace(
             f"{self.level}", f"{self.level + 1}"
         )
+        new[0].header["PFTIME"] = (Time.now().isot, "Pandora DPC Processing Time")
         if upcast:
             new = new.__to_l1__()
         return new
@@ -324,9 +231,29 @@ class ProcessingMixins:
         new._append_wcs()
         new._append_scene_extensions()
         new._append_error_extension()
+
+        if self.instrument == "NIRDA":
+            pix = new.row - new["catalog"].data["row"][0]
+            wav = NIRDAReference.get_wavelength_position(pix)
+            sens = NIRDAReference.get_spectrum_normalization_per_pixel(pix)
+
+            wavtab = fits.TableHDU.from_columns(
+                [
+                    fits.Column(
+                        "wavelength", "D", array=wav.value, unit=wav.unit.to_string()
+                    ),
+                    fits.Column(
+                        "sensitivity", "D", array=sens.value, unit=sens.unit.to_string()
+                    ),
+                ],
+                name="WAVELENGTH",
+            )
+            new.append(wavtab)
+
         new[0].header["PFCLASS"] = new.__class__.__name__.replace(
             f"{self.level}", f"{self.level + 1}"
         )
+        new[0].header["PFTIME"] = (Time.now().isot, "Pandora DPC Processing Time")
 
         if upcast:
             new = new.__to_l2__()
