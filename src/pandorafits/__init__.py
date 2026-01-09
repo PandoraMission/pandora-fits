@@ -79,6 +79,7 @@ def reset_config():
     config["SETTINGS"] = {
         "log_level": "INFO",
         "data_dir": "/Users/chedges/Desktop/newlancedata/",
+        "calendar_dir": "/Users/chedges/Desktop/",
         "log_dir": user_data_dir("pandorafits") + "/logs",
         "level0_dir": user_data_dir("pandorafits"),
         "level1_dir": user_data_dir("pandorafits") + "/level1",
@@ -162,6 +163,7 @@ for key in [
         reset_config()
         config = load_config()
 
+CALENDAR_DIR = config["SETTINGS"]["calendar_dir"]
 LEVEL0_DIR = config["SETTINGS"]["level0_dir"]
 DATA_DIR = config["SETTINGS"]["data_dir"]
 CRSOFTVER = config["SETTINGS"]["crsoftver"]
@@ -190,7 +192,7 @@ def display_config() -> pd.DataFrame:
 NIRDAReference = pr.NIRDAReference()
 VISDAReference = pr.VISDAReference()
 
-from .io import *
+from .io import *  # noqa
 from .nirda import *  # noqa
 from .visda import *  # noqa
 

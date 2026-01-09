@@ -10,13 +10,14 @@ from astropy.time import Time
 
 from .. import CRSOFTVER, LEVEL0_DIR, LEVEL1_DIR, __version__, logger
 from ..utils import get_dpc_hashkey
-from .mixins import DataBaseMixins, FileDataBaseMixins
+from .mixins import DataBaseMixins, ArchiveDataBaseMixins
 
 
-class Level1DataBase(FileDataBaseMixins, DataBaseMixins):
+class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
     """Database for managing Level 1 files."""
 
     table_name = "pointings"
+    db_path = f"{LEVEL1_DIR}/level1.db"
     level = 1
     level_dir = LEVEL1_DIR
 
@@ -55,34 +56,35 @@ class Level1DataBase(FileDataBaseMixins, DataBaseMixins):
     }
 
     def __init__(self):
-        self.db_path = f"{self.level_dir}/level{self.level}.db"
-        self.conn = sqlite3.connect(self.db_path, timeout=120)
-        self.cur = self.conn.cursor()
+        # self.db_path = f"{self.level_dir}/level{self.level}.db"
+        # self.conn = sqlite3.connect(self.db_path, timeout=120)
+        # self.cur = self.conn.cursor()
 
-        key_string = ", ".join(
-            [f"{key} {item}" for key, item in self._sql_key_dict.items()]
-        )
-        self.cur.execute(
-            f"""
-        CREATE TABLE IF NOT EXISTS pointings ({key_string})
-        """
-        )
+        # key_string = ", ".join(
+        #     [f"{key} {item}" for key, item in self._sql_key_dict.items()]
+        # )
+        # self.cur.execute(
+        #     f"""
+        # CREATE TABLE IF NOT EXISTS pointings ({key_string})
+        # """
+        # )
 
-        key_string = ", ".join([f"{key}" for key, item in self._sql_key_dict.items()])
-        value_string = ", ".join(["?"] * len(self._sql_key_dict))
-        self.update_str = f"""INSERT INTO pointings 
-        ({key_string})
-        VALUES ({value_string})"""
-        self.conn.commit()
-        os.chmod(
-            self.db_path,
-            stat.S_IRUSR
-            | stat.S_IWUSR  # owner: read/write
-            | stat.S_IRGRP
-            | stat.S_IWGRP,  # group: read/write
-        )
-        # Add the level0 database in
-        self.cur.execute(f"ATTACH DATABASE '{LEVEL0_DIR}/pointings.db' AS level0")
+        # key_string = ", ".join([f"{key}" for key, item in self._sql_key_dict.items()])
+        # value_string = ", ".join(["?"] * len(self._sql_key_dict))
+        # self.update_str = f"""INSERT INTO pointings
+        # ({key_string})
+        # VALUES ({value_string})"""
+        # self.conn.commit()
+        # os.chmod(
+        #     self.db_path,
+        #     stat.S_IRUSR
+        #     | stat.S_IWUSR  # owner: read/write
+        #     | stat.S_IRGRP
+        #     | stat.S_IWGRP,  # group: read/write
+        # )
+        # # Add the level0 database in
+        super().__init__()
+        self.cur.execute(f"ATTACH DATABASE '{LEVEL0_DIR}/level0.db' AS level0")
 
     def __repr__(self):
         return f"Pandora Level{self.level}DataBase"

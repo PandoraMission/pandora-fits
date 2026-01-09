@@ -3,13 +3,13 @@
 
 from .. import LEVEL1_DIR, LEVEL2_DIR, __version__
 from .level1 import Level1DataBase
-from .mixins import DataBaseMixins, FileDataBaseMixins
 
 
-class Level2DataBase(Level1DataBase, FileDataBaseMixins, DataBaseMixins):
+class Level2DataBase(Level1DataBase):
     """Database for managing Level 2 files."""
 
     table_name = "pointings"
+    db_path = f"{LEVEL2_DIR}/level2.db"
     level = 2
     level_dir = LEVEL2_DIR
 

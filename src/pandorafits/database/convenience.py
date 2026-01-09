@@ -19,9 +19,11 @@ from .. import (
 from . import Level1DataBase  # noqa
 from . import Level2DataBase  # noqa
 from . import Level3DataBase  # noqa
-from . import AstrometryDataBase, Level0DataBase
+from . import TargetDataBase, AstrometryDataBase, Level0DataBase
 
 __all__ = [
+    "delete_targetdatabase",
+    "update_targetdatabase",
     "delete_astrometrydatabase",
     "update_astrometrydatabase",
     "update_level0database",
@@ -38,6 +40,33 @@ __all__ = [
     "get_level_database",
     "get_astrometry_database",
 ]
+
+
+def delete_targetdatabase() -> None:
+    """
+    Deletes the SQLite database file for targets.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the database file does not exist.
+    """
+    db_path = f"{LEVEL0_DIR}/targets.db"
+    if os.path.exists(db_path):
+        os.remove(db_path)
+        logger.warning(f"Target Database at {db_path} has been deleted.")
+    else:
+        logger.warning(
+            f"Tried to delete TargetDataBase. No database found at {db_path}."
+        )
+
+
+def update_targetdatabase() -> None:
+    """
+    Creates and updates to the SQLite database file.
+    """
+    with TargetDataBase() as db:
+        db.crawl_and_add()
 
 
 def delete_astrometrydatabase() -> None:
@@ -84,7 +113,7 @@ def delete_level0database() -> None:
     FileNotFoundError
         If the database file does not exist.
     """
-    db_path = f"{LEVEL0_DIR}/pointings.db"
+    db_path = f"{LEVEL0_DIR}/level0.db"
     if os.path.exists(db_path):
         os.remove(db_path)
         logger.warning(f"Database at {db_path} has been deleted.")

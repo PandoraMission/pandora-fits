@@ -2,10 +2,13 @@
 
 import os
 from datetime import datetime, timezone
-
+from .. import LEVEL0_DIR, LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR  # noqa
+import stat
 import numpy as np
 import pandas as pd
 from astropy.time import Time
+import sqlite3
+
 
 from .. import logger  # noqa
 
@@ -22,6 +25,34 @@ def _process_time(time):
 
 
 class DataBaseMixins:
+    def __init__(self):
+        self.conn = sqlite3.connect(self.db_path)
+        self.cur = self.conn.cursor()
+
+        key_string = ", ".join(
+            [f"{key} {item}" for key, item in self._sql_key_dict.items()]
+        )
+        self.cur.execute(
+            f"""
+        CREATE TABLE IF NOT EXISTS {self.table_name} ({key_string})
+        """
+        )
+
+        key_string = ", ".join([f"{key}" for key, item in self._sql_key_dict.items()])
+        value_string = ", ".join(["?"] * len(self._sql_key_dict))
+        self.update_str = f"""INSERT INTO {self.table_name} 
+        ({key_string})
+        VALUES ({value_string})"""
+        self.conn.commit()
+
+        os.chmod(
+            self.db_path,
+            stat.S_IRUSR
+            | stat.S_IWUSR  # owner: read/write
+            | stat.S_IRGRP
+            | stat.S_IWGRP,  # group: read/write
+        )
+
     def __enter__(self):
         return self
 
@@ -70,14 +101,19 @@ class DataBaseMixins:
 
         return pd.read_sql_query(sql, self.conn, params=params)
 
+    def check_filename_in_database(self, filename):
+        self.cur.execute(
+            f"SELECT 1 FROM {self.table_name} WHERE filename=?",
+            ((filename.split("/")[-1] if "/" in filename else filename),),
+        )
+        return self.cur.fetchone() is not None
 
-class FileDataBaseMixins:
+
+class ArchiveDataBaseMixins:
     def to_archive_manifest(self):
         logger.info(f"Creating Level {self.level} archive manifest.")
         manifest_path = (
-            globals()[f"LEVEL{self.level}_DIR"]
-            + "/"
-            + f"level{self.level}_manifest.csv"
+            locals()[f"LEVEL{self.level}_DIR"] + "/" + f"level{self.level}_manifest.csv"
         )
         columns = [
             "Target Name",
@@ -96,6 +132,7 @@ class FileDataBaseMixins:
             "Delivery Date",
         ]
         df = self.to_pandas()
+        df["lvlfilepath"] = df.lvldir + "/" + df.lvlfilename
         k = np.asarray([os.path.isfile(path) for path in df.lvlfilepath.values])
         if not k.any():
             logger.info(
@@ -150,3 +187,4 @@ class FileDataBaseMixins:
         logger.info(f"Archive manifest stored at {manifest_path}")
 
         adf.to_csv(manifest_path, index=False)
+        return adf

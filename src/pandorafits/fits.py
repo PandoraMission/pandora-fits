@@ -411,7 +411,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 return (u.millisecond * self[0].header["FRMTIME"]).to(u.second)
             else:
                 return (
-                    u.millisecond * self[0].header["FRMTIME"] * self[0].header["GRPS"]
+                    u.millisecond * self[0].header["FRMTIME"] * self[0].header["READS"]
                 ).to(u.second)
         elif "EXPTIMEU" in self[0].header:
             return (

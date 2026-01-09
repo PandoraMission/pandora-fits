@@ -16,13 +16,17 @@ from astropy.time import Time
 
 from .. import DATA_DIR, LEVEL0_DIR, __version__
 from ..roll import get_roll
-from .mixins import DataBaseMixins, FileDataBaseMixins
+from .mixins import DataBaseMixins
+from .astrometry import AstrometryDataBase
+from .targets import TargetDataBase
 
 
-class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
+class Level0DataBase(DataBaseMixins):
     """Database for managing files that have been delivered by MOC."""
 
     table_name = "pointings"
+    db_path = f"{LEVEL0_DIR}/level0.db"
+    level = 0
     _sql_key_dict = {
         "filename": "TEXT PRIMARY KEY",
         "lvlfilename": "TEXT",
@@ -36,6 +40,7 @@ class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
         "date": "STR",
         "exptime": "FLOAT",
         "dpc_obs_id": "INT",
+        "dpc_hash_key": "TEXT",
         "start": "FLOAT",
         "instrmnt": "TEXT",
         "roisizex": "INT",
@@ -47,7 +52,7 @@ class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
         "targ_id": "STR",
         "targ_ra": "FLOAT",
         "targ_dec": "FLOAT",
-        "targ_rll": "FLOAT",
+        # "targ_rll": "FLOAT",
         "naxis1": "INT",
         "naxis2": "INT",
         "naxis3": "INT",
@@ -57,44 +62,36 @@ class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
         "filesize": "FLOAT",
     }
 
-    def __init__(self):
-        self.db_path = f"{LEVEL0_DIR}/{self.table_name}.db"
-        self.conn = sqlite3.connect(self.db_path)
-        self.cur = self.conn.cursor()
+    # def __init__(self):
+    #     self.conn = sqlite3.connect(self.db_path)
+    #     self.cur = self.conn.cursor()
 
-        key_string = ", ".join(
-            [f"{key} {item}" for key, item in self._sql_key_dict.items()]
-        )
-        self.cur.execute(
-            f"""
-        CREATE TABLE IF NOT EXISTS {self.table_name} ({key_string})
-        """
-        )
+    #     key_string = ", ".join(
+    #         [f"{key} {item}" for key, item in self._sql_key_dict.items()]
+    #     )
+    #     self.cur.execute(
+    #         f"""
+    #     CREATE TABLE IF NOT EXISTS {self.table_name} ({key_string})
+    #     """
+    #     )
 
-        key_string = ", ".join([f"{key}" for key, item in self._sql_key_dict.items()])
-        value_string = ", ".join(["?"] * len(self._sql_key_dict))
-        self.update_str = f"""INSERT INTO {self.table_name} 
-        ({key_string})
-        VALUES ({value_string})"""
-        self.conn.commit()
+    #     key_string = ", ".join([f"{key}" for key, item in self._sql_key_dict.items()])
+    #     value_string = ", ".join(["?"] * len(self._sql_key_dict))
+    #     self.update_str = f"""INSERT INTO {self.table_name}
+    #     ({key_string})
+    #     VALUES ({value_string})"""
+    #     self.conn.commit()
 
-        os.chmod(
-            self.db_path,
-            stat.S_IRUSR
-            | stat.S_IWUSR  # owner: read/write
-            | stat.S_IRGRP
-            | stat.S_IWGRP,  # group: read/write
-        )
+    #     os.chmod(
+    #         self.db_path,
+    #         stat.S_IRUSR
+    #         | stat.S_IWUSR  # owner: read/write
+    #         | stat.S_IRGRP
+    #         | stat.S_IWGRP,  # group: read/write
+    #     )
 
     def __repr__(self):
-        return "Pandora Level0DataBase"
-
-    def check_filename_in_database(self, filename):
-        self.cur.execute(
-            f"SELECT 1 FROM {self.table_name} WHERE filename=?",
-            ((filename.split("/")[-1] if "/" in filename else filename),),
-        )
-        return self.cur.fetchone() is not None
+        return f"Pandora Level{self.level}DataBase"
 
     def get_entry(self, filename):
         filesize = os.path.getsize(filename) / (1024 * 1024)
@@ -149,6 +146,7 @@ class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
                     exptime,
                     -1,
                     -1,
+                    -1,
                     hdr["INSTRMNT"],
                     hdr["ROISIZEX"],
                     hdr["ROISIZEY"],
@@ -160,7 +158,7 @@ class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
                     hdr["TARG_ID"] if "TARG_ID" in hdr else None,
                     hdr["TARG_RA"] if "TARG_RA" in hdr else None,
                     hdr["TARG_DEC"] if "TARG_DEC" in hdr else None,
-                    40.0,
+                    # 40.0,
                     hdr1["NAXIS1"] if "NAXIS1" in hdr1 else None,
                     hdr1["NAXIS2"] if "NAXIS2" in hdr1 else None,
                     hdr1["NAXIS3"] if "NAXIS3" in hdr1 else None,
@@ -255,54 +253,133 @@ class Level0DataBase(FileDataBaseMixins, DataBaseMixins):
         """
         self.conn.execute(sql)
 
-    def _update_roll(self):
-        df = pd.read_sql_query(
-            f"SELECT start, targ_ra, targ_dec FROM {self.table_name} WHERE start = jd",
-            self.conn,
-        )
-        df["targ_rll"] = [
-            get_roll(Time(start, format="jd"), SkyCoord(ra, dec, unit="deg"))[0].value
-            for start, ra, dec in df.values
-        ]
+    # def _update_roll(self):
+    #     df = pd.read_sql_query(
+    #         f"SELECT start, targ_ra, targ_dec FROM {self.table_name} WHERE start = jd",
+    #         self.conn,
+    #     )
+    #     df["targ_rll"] = [
+    #         get_roll(Time(start, format="jd"), SkyCoord(ra, dec, unit="deg"))[0].value
+    #         for start, ra, dec in df.values
+    #     ]
 
-        # 1) write df to a temp table
-        df.to_sql("roll_map", self.conn, if_exists="replace", index=False)
+    #     # 1) write df to a temp table
+    #     df.to_sql("roll_map", self.conn, if_exists="replace", index=False)
 
-        # 2) (optional but strongly recommended) index the join keys in both tables
-        self.cur.execute(
-            f"CREATE INDEX IF NOT EXISTS idx_main_keys ON {self.table_name}(start, targ_ra, targ_dec)"
-        )
-        self.cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_map_keys  ON roll_map(start, targ_ra, targ_dec)"
-        )
+    #     # 2) (optional but strongly recommended) index the join keys in both tables
+    #     self.cur.execute(
+    #         f"CREATE INDEX IF NOT EXISTS idx_main_keys ON {self.table_name}(start, targ_ra, targ_dec)"
+    #     )
+    #     self.cur.execute(
+    #         "CREATE INDEX IF NOT EXISTS idx_map_keys  ON roll_map(start, targ_ra, targ_dec)"
+    #     )
+    #     self.conn.commit()
+
+    #     # 3) update matching rows (fills duplicates in main table too)
+    #     self.cur.execute(
+    #         f"""
+    #     UPDATE {self.table_name}
+    #     SET targ_rll = (
+    #     SELECT m.targ_rll
+    #     FROM roll_map m
+    #     WHERE m.start = {self.table_name}.start
+    #         AND m.targ_ra    = {self.table_name}.targ_ra
+    #         AND m.targ_dec   = {self.table_name}.targ_dec
+    #     )
+    #     WHERE EXISTS (
+    #     SELECT 1
+    #     FROM roll_map m
+    #     WHERE m.start = {self.table_name}.start
+    #         AND m.targ_ra    = {self.table_name}.targ_ra
+    #         AND m.targ_dec   = {self.table_name}.targ_dec
+    #     );
+    #     """
+    #     )
+    #     self.conn.commit()
+    #     self.cur.execute("DROP TABLE IF EXISTS roll_map")
+    #     self.conn.commit()
+
+    def _update_target_from_SOC(self):
+        # This makes sure the database exists
+        TargetDataBase()
+        self.cur.execute(f"ATTACH DATABASE '{LEVEL0_DIR}/targets.db' AS targets")
+
+        sql = """UPDATE pointings
+                SET
+                targ_ra = (
+                    SELECT e.targ_ra
+                    FROM targets e
+                    WHERE e.targ_id = pointings.targ_id
+                    AND e.created <= pointings.start
+                    AND e.targ_ra IS NOT NULL
+                    AND e.targ_ra = e.targ_ra             
+                    ORDER BY e.created DESC
+                    LIMIT 1
+                ),
+                targ_dec = (
+                    SELECT e.targ_dec
+                    FROM targets e
+                    WHERE e.targ_id = pointings.targ_id
+                    AND e.created <= pointings.start
+                    AND e.targ_dec IS NOT NULL
+                    AND e.targ_dec = e.targ_dec           
+                    ORDER BY e.created DESC
+                    LIMIT 1
+                )
+                WHERE
+                (
+                    pointings.targ_ra IS NULL OR pointings.targ_ra != pointings.targ_ra
+                    OR pointings.targ_dec IS NULL OR pointings.targ_dec != pointings.targ_dec
+                )
+                AND EXISTS (
+                    SELECT 1
+                    FROM targets e
+                    WHERE e.targ_id = pointings.targ_id
+                    AND e.created <= pointings.start
+                );"""
+
+        self.conn.execute(sql)
         self.conn.commit()
 
-        # 3) update matching rows (fills duplicates in main table too)
-        self.cur.execute(
-            f"""
-        UPDATE {self.table_name}
-        SET targ_rll = (
-        SELECT m.targ_rll
-        FROM roll_map m
-        WHERE m.start = {self.table_name}.start
-            AND m.targ_ra    = {self.table_name}.targ_ra
-            AND m.targ_dec   = {self.table_name}.targ_dec
-        )
-        WHERE EXISTS (
-        SELECT 1
-        FROM roll_map m
-        WHERE m.start = {self.table_name}.start
-            AND m.targ_ra    = {self.table_name}.targ_ra
-            AND m.targ_dec   = {self.table_name}.targ_dec
-        );
-        """
-        )
+        sql = """
+            UPDATE pointings
+            SET
+            targ_ra = (
+                SELECT t.targ_ra
+                FROM targets.targets t
+                WHERE t.targ_id = pointings.targ_id
+                AND t.targ_ra IS NOT NULL
+                AND t.targ_ra = t.targ_ra
+                ORDER BY t.created ASC
+                LIMIT 1
+            ),
+            targ_dec = (
+                SELECT t.targ_dec
+                FROM targets.targets t
+                WHERE t.targ_id = pointings.targ_id
+                AND t.targ_dec IS NOT NULL
+                AND t.targ_dec = t.targ_dec
+                ORDER BY t.created ASC
+                LIMIT 1
+            )
+            WHERE
+            (pointings.targ_ra IS NULL OR pointings.targ_ra != pointings.targ_ra
+            OR pointings.targ_dec IS NULL OR pointings.targ_dec != pointings.targ_dec)
+            AND EXISTS (
+                SELECT 1
+                FROM targets.targets t
+                WHERE t.targ_id = pointings.targ_id
+            );
+            """
+
+        self.conn.execute(sql)
         self.conn.commit()
-        self.cur.execute("DROP TABLE IF EXISTS roll_map")
-        self.conn.commit()
+
+        self.cur.execute("DETACH DATABASE targets;")
 
     def update_pointings(self):
         self._update_dpc_obs_id()
         self._update_target()
         self._update_start()
-        self._update_roll()
+        self._update_target_from_SOC()
+        # self._update_roll()

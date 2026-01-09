@@ -9,14 +9,14 @@ from .. import (
     __version__,
 )
 from ..utils import get_dpc_hashkey
-from .level1 import Level1DataBase
-from .mixins import DataBaseMixins, FileDataBaseMixins
+from .level2 import Level2DataBase
 
 
-class Level3DataBase(Level1DataBase, FileDataBaseMixins, DataBaseMixins):
+class Level3DataBase(Level2DataBase):
     """Database for managing Level 2 files."""
 
     table_name = "pointings"
+    db_path = f"{LEVEL3_DIR}/level3.db"
     level = 3
     level_dir = LEVEL3_DIR
 
