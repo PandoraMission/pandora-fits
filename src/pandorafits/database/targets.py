@@ -1,34 +1,15 @@
 """Tools for generating fallback database of SOC targets"""
 
-import pandas as pd
-from lxml import etree
+import warnings
 import xml.etree.ElementTree as ET
-from astropy.time import Time
-import os
-import warnings
-from datetime import timedelta
-from pathlib import Path
-
-from astropy.io import fits
-from astropy.time import Time
-
-from .. import DATA_DIR, __version__, LEVEL0_DIR
-from ..utils import get_dpc_hashkey
-
-import os
-import warnings
-from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
-from astropy.coordinates import SkyCoord
-from astropy.io import fits
 from astropy.time import Time
 
-from .. import DATA_DIR, CALENDAR_DIR, __version__
-from ..roll import get_roll
+from .. import CALENDAR_DIR, LEVEL0_DIR
+from ..utils import get_dpc_hashkey
 from .mixins import DataBaseMixins
-import numpy as np
 
 
 def calendar_to_targets(fname):
@@ -121,7 +102,7 @@ class TargetDataBase(DataBaseMixins):
             self.add_entries(rows)
 
     def get_entry(self, filename):
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")  # capture all warnings
 
             df = calendar_to_targets(filename)

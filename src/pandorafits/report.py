@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
-import numpy as np
-from astropy.table import Table
 import pandas as pd
+from matplotlib.backends.backend_pdf import PdfPages
 
 
 class ReportMixins:

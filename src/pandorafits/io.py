@@ -1,6 +1,7 @@
 """Deal with opening files nicely"""
 
 from __future__ import annotations
+
 import functools
 import inspect
 from typing import Callable, List, Tuple, Type

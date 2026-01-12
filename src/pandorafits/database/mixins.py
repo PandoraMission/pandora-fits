@@ -1,16 +1,18 @@
 """Mixins for databases"""
 
 import os
-from datetime import datetime, timezone
-from .. import LEVEL0_DIR, LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR  # noqa
+import sqlite3
 import stat
+from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
+from astropy.coordinates import SkyCoord
 from astropy.time import Time
-import sqlite3
-
 
 from .. import logger  # noqa
+from .. import LEVEL0_DIR, LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR  # noqa
+from ..roll import get_roll
 
 
 def _process_time(time):
@@ -40,9 +42,9 @@ class DataBaseMixins:
 
         key_string = ", ".join([f"{key}" for key, item in self._sql_key_dict.items()])
         value_string = ", ".join(["?"] * len(self._sql_key_dict))
-        self.update_str = f"""INSERT INTO {self.table_name} 
-        ({key_string})
-        VALUES ({value_string})"""
+        self.update_str = (
+            f"""INSERT INTO {self.table_name} ({key_string}) VALUES ({value_string})"""
+        )
         self.conn.commit()
 
         os.chmod(
@@ -107,6 +109,52 @@ class DataBaseMixins:
             ((filename.split("/")[-1] if "/" in filename else filename),),
         )
         return self.cur.fetchone() is not None
+
+    def _update_roll(self):
+        df = pd.read_sql_query(
+            f"SELECT jd0, targ_ra, targ_dec FROM {self.table_name} WHERE jd0 = jd",
+            self.conn,
+        )
+        df["targ_rll"] = [
+            get_roll(Time(jd0, format="jd"), SkyCoord(ra, dec, unit="deg"))[0].value
+            for jd0, ra, dec in df.values
+        ]
+
+        # 1) write df to a temp table
+        df.to_sql("roll_map", self.conn, if_exists="replace", index=False)
+
+        # 2) (optional but strongly recommended) index the join keys in both tables
+        self.cur.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_main_keys ON {self.table_name}(jd0, targ_ra, targ_dec)"
+        )
+        self.cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_map_keys  ON roll_map(jd0, targ_ra, targ_dec)"
+        )
+        self.conn.commit()
+
+        # 3) update matching rows (fills duplicates in main table too)
+        self.cur.execute(
+            f"""
+        UPDATE {self.table_name}
+        SET targ_rll = (
+        SELECT m.targ_rll
+        FROM roll_map m
+        WHERE m.jd0 = {self.table_name}.jd0
+            AND m.targ_ra    = {self.table_name}.targ_ra
+            AND m.targ_dec   = {self.table_name}.targ_dec
+        )
+        WHERE EXISTS (
+        SELECT 1
+        FROM roll_map m
+        WHERE m.jd0 = {self.table_name}.jd0
+            AND m.targ_ra    = {self.table_name}.targ_ra
+            AND m.targ_dec   = {self.table_name}.targ_dec
+        );
+        """
+        )
+        self.conn.commit()
+        self.cur.execute("DROP TABLE IF EXISTS roll_map")
+        self.conn.commit()
 
 
 class ArchiveDataBaseMixins:

@@ -7,7 +7,6 @@ import pandas as pd
 
 from .. import (
     CRSOFTVER,
-    DATA_DIR,
     LEVEL0_DIR,
     LEVEL1_DIR,
     LEVEL2_DIR,
@@ -19,7 +18,7 @@ from .. import (
 from . import Level1DataBase  # noqa
 from . import Level2DataBase  # noqa
 from . import Level3DataBase  # noqa
-from . import TargetDataBase, AstrometryDataBase, Level0DataBase
+from . import AstrometryDataBase, Level0DataBase, TargetDataBase
 
 __all__ = [
     "delete_targetdatabase",

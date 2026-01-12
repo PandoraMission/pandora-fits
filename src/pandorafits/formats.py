@@ -1,23 +1,12 @@
-from datetime import timedelta
-from pathlib import Path
+import tempfile
 
 import numpy as np
 import pandas as pd
 from astropy.io import fits
-from astropy.table import Table
-from astropy.time import Time
-import tempfile
 
 from . import FORMATSDIR
-from .nirda import NIRDALevel0HDUList, NIRDALevel1HDUList, NIRDALevel2HDUList
-from .visda import (
-    VISDAFFILevel0HDUList,
-    VISDAFFILevel1HDUList,
-    VISDAFFILevel2HDUList,
-    VISDALevel0HDUList,
-    VISDALevel1HDUList,
-    VISDALevel2HDUList,
-)
+from .nirda import NIRDALevel0HDUList
+from .visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
 
 
 def hdulist_to_dataframes(hdulist):
@@ -104,88 +93,75 @@ def hdulist_to_excel(hdulist, filename="output.xlsx"):
             )
 
 
-def update_formats(example_file_path, level=2):
-    #     paths = {}
-    #     for image_type in ["InfImg", "VisSci", "VisImg"]:
-    #         paths[image_type] = [
-    #             str(path) for path in Path(example_files_path).rglob(f"*{image_type}*.fits")
-    #         ]
-    #     # We don't care about these being right, we just want to get the format of the processed data.
-    # targ_id, targ_ra, targ_dec, targ_rll = "example", 0, 0, 10
+def update_VISDAFFI_format(filepath, level=2):
+    hdulist0 = fits.open(filepath)
+    hdulist_to_excel(hdulist0, f"{FORMATSDIR}visda/level0-ffi_visda.xlsx")
+    if level == 0:
+        return
+    hdulist1 = VISDAFFILevel0HDUList(filepath).to_level1(
+        upcast=False  # , targ_ra=targ_ra, targ_dec=targ_dec, targ_rll=targ_rll
+    )
+    # add_pointing_params(hdulist1)
+    hdulist_to_excel(hdulist1, f"{FORMATSDIR}visda/level1-ffi_visda.xlsx")
+    if level == 1:
+        return
+    hdulist2 = (
+        VISDAFFILevel0HDUList(filepath)
+        .to_level1()  # targ_ra=targ_ra, targ_dec=targ_dec, targ_rll=targ_rll)
+        .to_level2(upcast=False)
+    )
+    # add_pointing_params(hdulist2)
+    hdulist_to_excel(hdulist2, f"{FORMATSDIR}visda/level2-ffi_visda.xlsx")
+    if level == 2:
+        return
 
-    # def add_pointing_params(hdulist):
-    #     hdulist[0].header.set("TARG_ID", targ_id, "Target ID/keyword")
-    #     hdulist[0].header.set("TARG_RA", targ_ra, "Target right ascension [deg]")
-    #     hdulist[0].header.set("TARG_DEC", targ_dec, "Target declination [deg]")
-    #     hdulist[0].header.set("TARG_RLL", targ_rll, "Target roll")
-    #     hdulist[0].header.set("DPCOBSID", 0, "DPC Observation ID")
-    #     hdulist[0].header.set("SEQSTART", 2454833, "DPC Observation Sequence Start")
 
-    def update_VISDAFFI_format(filepath):
-        hdulist0 = fits.open(filepath)
-        hdulist_to_excel(hdulist0, f"{FORMATSDIR}visda/level0-ffi_visda.xlsx")
-        if level == 0:
-            return
-        hdulist1 = VISDAFFILevel0HDUList(filepath).to_level1(
+def update_VISDA_format(filepath, level=2):
+    hdulist0 = fits.open(filepath)
+    hdulist_to_excel(hdulist0, f"{FORMATSDIR}visda/level0_visda.xlsx")
+    if level == 0:
+        return
+    hdulist1 = VISDALevel0HDUList(filepath).to_level1(upcast=False)
+    # add_pointing_params(hdulist1)
+    hdulist_to_excel(hdulist1, f"{FORMATSDIR}visda/level1_visda.xlsx")
+    if level == 1:
+        return
+    hdulist2 = VISDALevel0HDUList(filepath).to_level1().to_level2(upcast=False)
+    # add_pointing_params(hdulist2)
+    hdulist_to_excel(hdulist2, f"{FORMATSDIR}visda/level2_visda.xlsx")
+    if level == 2:
+        return
+
+
+def update_NIRDA_format(filepath, level=2):
+    hdulist0 = fits.open(filepath)
+    hdulist_to_excel(hdulist0, f"{FORMATSDIR}nirda/level0_nirda.xlsx")
+    if level == 0:
+        return
+    hdulist1 = NIRDALevel0HDUList(filepath).to_level1(
+        upcast=False  # ), targ_ra=targ_ra, targ_dec=targ_dec, targ_rll=targ_rll
+    )
+    # add_pointing_params(hdulist1)
+    hdulist_to_excel(hdulist1, f"{FORMATSDIR}nirda/level1_nirda.xlsx")
+    if level == 1:
+        return
+    hdulist2 = (
+        NIRDALevel0HDUList(filepath)
+        .to_level1()
+        .to_level2(
             upcast=False  # , targ_ra=targ_ra, targ_dec=targ_dec, targ_rll=targ_rll
         )
-        # add_pointing_params(hdulist1)
-        hdulist_to_excel(hdulist1, f"{FORMATSDIR}visda/level1-ffi_visda.xlsx")
-        if level == 1:
-            return
-        hdulist2 = (
-            VISDAFFILevel0HDUList(filepath)
-            .to_level1()  # targ_ra=targ_ra, targ_dec=targ_dec, targ_rll=targ_rll)
-            .to_level2(upcast=False)
-        )
-        # add_pointing_params(hdulist2)
-        hdulist_to_excel(hdulist2, f"{FORMATSDIR}visda/level2-ffi_visda.xlsx")
-        if level == 2:
-            return
+    )
+    # add_pointing_params(hdulist2)
+    hdulist_to_excel(hdulist2, f"{FORMATSDIR}nirda/level2_nirda.xlsx")
+    if level == 2:
+        return
 
-    def update_VISDA_format(filepath):
-        hdulist0 = fits.open(filepath)
-        hdulist_to_excel(hdulist0, f"{FORMATSDIR}visda/level0_visda.xlsx")
-        if level == 0:
-            return
-        hdulist1 = VISDALevel0HDUList(filepath).to_level1(upcast=False)
-        # add_pointing_params(hdulist1)
-        hdulist_to_excel(hdulist1, f"{FORMATSDIR}visda/level1_visda.xlsx")
-        if level == 1:
-            return
-        hdulist2 = VISDALevel0HDUList(filepath).to_level1().to_level2(upcast=False)
-        # add_pointing_params(hdulist2)
-        hdulist_to_excel(hdulist2, f"{FORMATSDIR}visda/level2_visda.xlsx")
-        if level == 2:
-            return
 
-    def update_NIRDA_format(filepath):
-        hdulist0 = fits.open(filepath)
-        hdulist_to_excel(hdulist0, f"{FORMATSDIR}nirda/level0_nirda.xlsx")
-        if level == 0:
-            return
-        hdulist1 = NIRDALevel0HDUList(filepath).to_level1(
-            upcast=False  # ), targ_ra=targ_ra, targ_dec=targ_dec, targ_rll=targ_rll
-        )
-        # add_pointing_params(hdulist1)
-        hdulist_to_excel(hdulist1, f"{FORMATSDIR}nirda/level1_nirda.xlsx")
-        if level == 1:
-            return
-        hdulist2 = (
-            NIRDALevel0HDUList(filepath)
-            .to_level1()
-            .to_level2(
-                upcast=False  # , targ_ra=targ_ra, targ_dec=targ_dec, targ_rll=targ_rll
-            )
-        )
-        # add_pointing_params(hdulist2)
-        hdulist_to_excel(hdulist2, f"{FORMATSDIR}nirda/level2_nirda.xlsx")
-        if level == 2:
-            return
-
+def update_formats(example_file_path, level=2):
     if "VisImg" in example_file_path:
-        update_VISDAFFI_format(example_file_path)
+        update_VISDAFFI_format(example_file_path, level=level)
     if "VisSci" in example_file_path:
-        update_VISDA_format(example_file_path)
+        update_VISDA_format(example_file_path, level=level)
     if "InfImg" in example_file_path:
-        update_NIRDA_format(example_file_path)
+        update_NIRDA_format(example_file_path, level=level)

@@ -1,13 +1,11 @@
-from . import FORMATSDIR, NIRDAReference
-from .fits import PandoraHDUList
-from .io import register_hdulist
 import matplotlib.pyplot as plt
 import numpy as np
-import pandoraaperture as pa
-from . import logger
-from .scene import get_NIRDA_scene
-from astropy.io import fits
 from astropy.coordinates import SkyCoord
+
+from . import FORMATSDIR, NIRDAReference, logger
+from .fits import PandoraHDUList
+from .io import register_hdulist
+from .scene import get_NIRDA_scene
 
 __all__ = [
     "NIRDALevel0HDUList",

@@ -10,7 +10,7 @@ from astropy.time import Time
 
 from .. import CRSOFTVER, LEVEL0_DIR, LEVEL1_DIR, __version__, logger
 from ..utils import get_dpc_hashkey
-from .mixins import DataBaseMixins, ArchiveDataBaseMixins
+from .mixins import ArchiveDataBaseMixins, DataBaseMixins
 
 
 class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
@@ -213,8 +213,8 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         return f"{self.level_dir}/{t.year}/{t.month}/{t.day}/{get_dpc_hashkey(targ_id, targ_ra, targ_dec)}/{fname_no_suffix}_v{__version__.replace('.', '-')}_l{self.level}.{suffix}"
 
     def _get_filemap(self):
-        from ..visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
         from ..nirda import NIRDALevel0HDUList
+        from ..visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
 
         filemap = {
             "VisSci": VISDALevel0HDUList,

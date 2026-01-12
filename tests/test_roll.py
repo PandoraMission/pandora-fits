@@ -3,7 +3,7 @@ import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 
-from pandorafits.database.roll import get_roll
+from pandorafits.roll import get_roll
 
 
 def test_roll():

@@ -14,10 +14,10 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.time import Time
 
-from .. import DATA_DIR, LEVEL0_DIR, __version__
+from .. import DATA_DIR, LEVEL0_DIR, __version__, logger
 from ..roll import get_roll
-from .mixins import DataBaseMixins
 from .astrometry import AstrometryDataBase
+from .mixins import DataBaseMixins
 from .targets import TargetDataBase
 
 
@@ -52,7 +52,7 @@ class Level0DataBase(DataBaseMixins):
         "targ_id": "STR",
         "targ_ra": "FLOAT",
         "targ_dec": "FLOAT",
-        # "targ_rll": "FLOAT",
+        "targ_rll": "FLOAT",
         "naxis1": "INT",
         "naxis2": "INT",
         "naxis3": "INT",
@@ -158,7 +158,7 @@ class Level0DataBase(DataBaseMixins):
                     hdr["TARG_ID"] if "TARG_ID" in hdr else None,
                     hdr["TARG_RA"] if "TARG_RA" in hdr else None,
                     hdr["TARG_DEC"] if "TARG_DEC" in hdr else None,
-                    # 40.0,
+                    40.0,
                     hdr1["NAXIS1"] if "NAXIS1" in hdr1 else None,
                     hdr1["NAXIS2"] if "NAXIS2" in hdr1 else None,
                     hdr1["NAXIS3"] if "NAXIS3" in hdr1 else None,
@@ -234,6 +234,7 @@ class Level0DataBase(DataBaseMixins):
             targ_dec = (SELECT dec_filled FROM filled WHERE filled.targ_id = {self.table_name}.targ_id)
         WHERE targ_ra IS NULL OR targ_dec IS NULL;
         """
+        logger.info("Filling in nan targets with recent VISDA data.")
         self.conn.execute(sql)
 
     def _update_start(self):
@@ -253,51 +254,51 @@ class Level0DataBase(DataBaseMixins):
         """
         self.conn.execute(sql)
 
-    # def _update_roll(self):
-    #     df = pd.read_sql_query(
-    #         f"SELECT start, targ_ra, targ_dec FROM {self.table_name} WHERE start = jd",
-    #         self.conn,
-    #     )
-    #     df["targ_rll"] = [
-    #         get_roll(Time(start, format="jd"), SkyCoord(ra, dec, unit="deg"))[0].value
-    #         for start, ra, dec in df.values
-    #     ]
+    def _update_roll(self):
+        df = pd.read_sql_query(
+            f"SELECT start, targ_ra, targ_dec FROM {self.table_name} WHERE start = jd",
+            self.conn,
+        )
+        df["targ_rll"] = [
+            get_roll(Time(start, format="jd"), SkyCoord(ra, dec, unit="deg"))[0].value
+            for start, ra, dec in df.values
+        ]
 
-    #     # 1) write df to a temp table
-    #     df.to_sql("roll_map", self.conn, if_exists="replace", index=False)
+        # 1) write df to a temp table
+        df.to_sql("roll_map", self.conn, if_exists="replace", index=False)
 
-    #     # 2) (optional but strongly recommended) index the join keys in both tables
-    #     self.cur.execute(
-    #         f"CREATE INDEX IF NOT EXISTS idx_main_keys ON {self.table_name}(start, targ_ra, targ_dec)"
-    #     )
-    #     self.cur.execute(
-    #         "CREATE INDEX IF NOT EXISTS idx_map_keys  ON roll_map(start, targ_ra, targ_dec)"
-    #     )
-    #     self.conn.commit()
+        # 2) (optional but strongly recommended) index the join keys in both tables
+        self.cur.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_main_keys ON {self.table_name}(start, targ_ra, targ_dec)"
+        )
+        self.cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_map_keys  ON roll_map(start, targ_ra, targ_dec)"
+        )
+        self.conn.commit()
 
-    #     # 3) update matching rows (fills duplicates in main table too)
-    #     self.cur.execute(
-    #         f"""
-    #     UPDATE {self.table_name}
-    #     SET targ_rll = (
-    #     SELECT m.targ_rll
-    #     FROM roll_map m
-    #     WHERE m.start = {self.table_name}.start
-    #         AND m.targ_ra    = {self.table_name}.targ_ra
-    #         AND m.targ_dec   = {self.table_name}.targ_dec
-    #     )
-    #     WHERE EXISTS (
-    #     SELECT 1
-    #     FROM roll_map m
-    #     WHERE m.start = {self.table_name}.start
-    #         AND m.targ_ra    = {self.table_name}.targ_ra
-    #         AND m.targ_dec   = {self.table_name}.targ_dec
-    #     );
-    #     """
-    #     )
-    #     self.conn.commit()
-    #     self.cur.execute("DROP TABLE IF EXISTS roll_map")
-    #     self.conn.commit()
+        # 3) update matching rows (fills duplicates in main table too)
+        self.cur.execute(
+            f"""
+        UPDATE {self.table_name}
+        SET targ_rll = (
+        SELECT m.targ_rll
+        FROM roll_map m
+        WHERE m.start = {self.table_name}.start
+            AND m.targ_ra    = {self.table_name}.targ_ra
+            AND m.targ_dec   = {self.table_name}.targ_dec
+        )
+        WHERE EXISTS (
+        SELECT 1
+        FROM roll_map m
+        WHERE m.start = {self.table_name}.start
+            AND m.targ_ra    = {self.table_name}.targ_ra
+            AND m.targ_dec   = {self.table_name}.targ_dec
+        );
+        """
+        )
+        self.conn.commit()
+        self.cur.execute("DROP TABLE IF EXISTS roll_map")
+        self.conn.commit()
 
     def _update_target_from_SOC(self):
         # This makes sure the database exists
@@ -338,6 +339,8 @@ class Level0DataBase(DataBaseMixins):
                     AND e.created <= pointings.start
                 );"""
 
+        logger.info("Filling in nan targets with recent SOC data.")
+
         self.conn.execute(sql)
         self.conn.commit()
 
@@ -374,6 +377,7 @@ class Level0DataBase(DataBaseMixins):
 
         self.conn.execute(sql)
         self.conn.commit()
+        logger.info("Filling in remaining nan targets with any SOC data.")
 
         self.cur.execute("DETACH DATABASE targets;")
 
@@ -382,4 +386,4 @@ class Level0DataBase(DataBaseMixins):
         self._update_target()
         self._update_start()
         self._update_target_from_SOC()
-        # self._update_roll()
+        self._update_roll()

@@ -3,11 +3,7 @@
 
 from astropy.time import Time
 
-from .. import (
-    LEVEL2_DIR,
-    LEVEL3_DIR,
-    __version__,
-)
+from .. import LEVEL2_DIR, LEVEL3_DIR, __version__
 from ..utils import get_dpc_hashkey
 from .level2 import Level2DataBase
 
@@ -43,8 +39,8 @@ class Level3DataBase(Level2DataBase):
         return f"{self.level_dir}/{t.year}/{t.month}/{t.day}/{get_dpc_hashkey(row[0], row[2], row[3])}/{Time(row[1], format='jd').strftime('%Y-%m-%d__%H-%M-%S')}_{row[0]}_v{__version__.replace('.', '-')}_l3.fits"
 
     def _get_filemap(self):
-        from ..visda import VISDAFFILevel2HDUList, VISDALevel2HDUList
         from ..nirda import NIRDALevel2HDUList
+        from ..visda import VISDAFFILevel2HDUList, VISDALevel2HDUList
 
         filemap = {
             "VisSci": VISDALevel2HDUList,

@@ -1,11 +1,12 @@
 """This module helps us cache scenes so we don't waste compute regenerating them between files."""
 
 from functools import lru_cache
-from . import VISDAReference, NIRDAReference
-from astropy.time import Time
-import pandoraaperture as pa
-import numpy as np
 
+import numpy as np
+import pandoraaperture as pa
+from astropy.time import Time
+
+from . import NIRDAReference, VISDAReference
 
 spatial_prf = pa.SpatialPRF.from_reference()
 dispersed_prf = pa.DispersedPRF.from_reference()

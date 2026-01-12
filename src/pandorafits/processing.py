@@ -5,10 +5,10 @@ from copy import deepcopy
 import astropy.units as u
 import numpy as np
 from astropy.io import fits
-from astropy.time import Time
 from astropy.table import Table
+from astropy.time import Time
 
-from . import __version__, logger, NIRDAReference
+from . import NIRDAReference, __version__, logger
 from .database import AstrometryDataBase
 
 

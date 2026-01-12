@@ -18,8 +18,8 @@ class Level2DataBase(Level1DataBase):
         self.cur.execute(f"ATTACH DATABASE '{LEVEL1_DIR}/level1.db' AS level1")
 
     def _get_filemap(self):
-        from ..visda import VISDAFFILevel1HDUList, VISDALevel1HDUList
         from ..nirda import NIRDALevel1HDUList
+        from ..visda import VISDAFFILevel1HDUList, VISDALevel1HDUList
 
         filemap = {
             "VisSci": VISDALevel1HDUList,

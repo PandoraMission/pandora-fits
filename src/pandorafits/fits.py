@@ -1,9 +1,15 @@
 """Class to handle Pandora fits files"""
 
+from datetime import timedelta
+
+import astropy.units as u
 import numpy as np
+from astropy.coordinates import SkyCoord
 
 # import pandas as pd
 from astropy.io import fits
+from astropy.time import Time
+from astropy.wcs import WCS
 
 from . import logger
 from .processing import ProcessingMixins
@@ -13,13 +19,6 @@ from .utils import (
     generate_random_table_values,
     get_excel_sheet,
 )
-from datetime import timedelta
-
-import astropy.units as u
-from astropy.time import Time
-from astropy.wcs import WCS
-from astropy.coordinates import SkyCoord
-
 
 __all__ = ["FITSTemplateException", "FITSValueException", "PandoraHDUList"]
 

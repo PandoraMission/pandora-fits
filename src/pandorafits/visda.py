@@ -1,18 +1,16 @@
+import matplotlib.pyplot as plt
 import numpy as np
-import pandoraaperture as pa
+import pandas as pd
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
-import astropy.units as u
-import matplotlib.pyplot as plt
-import pandas as pd
 
 from . import FORMATSDIR, VISDAReference, logger
 from .fits import PandoraHDUList
-from .reshape import list_to_panels, panels_to_cube, panels_to_list
-from .report import ReportMixins
 from .io import register_hdulist
-from .scene import get_VISDAFFI_scene, get_VISDA_scene
+from .report import ReportMixins
+from .reshape import list_to_panels, panels_to_cube, panels_to_list
+from .scene import get_VISDA_scene, get_VISDAFFI_scene
 
 __all__ = [
     "VISDAFFILevel0HDUList",
