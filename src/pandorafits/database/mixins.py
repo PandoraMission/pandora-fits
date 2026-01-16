@@ -110,63 +110,76 @@ class DataBaseMixins:
         )
         return self.cur.fetchone() is not None
 
-    def _update_roll(self):
-        df = pd.read_sql_query(
-            f"SELECT jd0, targ_ra, targ_dec FROM {self.table_name} WHERE jd0 = jd",
-            self.conn,
-        )
-        df["targ_rll"] = [
-            get_roll(Time(jd0, format="jd"), SkyCoord(ra, dec, unit="deg"))[0].value
-            for jd0, ra, dec in df.values
-        ]
+    # def _update_roll(self):
+    #     df = pd.read_sql_query(
+    #         f"SELECT start, targ_ra, targ_dec FROM {self.table_name} WHERE start = jd",
+    #         self.conn,
+    #     )
+    #     df["targ_rll"] = [
+    #         get_roll(Time(start, format="jd"), SkyCoord(ra, dec, unit="deg"))[0].value
+    #         for start, ra, dec in df.values
+    #     ]
 
-        # 1) write df to a temp table
-        df.to_sql("roll_map", self.conn, if_exists="replace", index=False)
+    #     # 1) write df to a temp table
+    #     df.to_sql("roll_map", self.conn, if_exists="replace", index=False)
 
-        # 2) (optional but strongly recommended) index the join keys in both tables
-        self.cur.execute(
-            f"CREATE INDEX IF NOT EXISTS idx_main_keys ON {self.table_name}(jd0, targ_ra, targ_dec)"
-        )
-        self.cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_map_keys  ON roll_map(jd0, targ_ra, targ_dec)"
-        )
-        self.conn.commit()
+    #     # 2) (optional but strongly recommended) index the join keys in both tables
+    #     self.cur.execute(
+    #         f"CREATE INDEX IF NOT EXISTS idx_main_keys ON {self.table_name}(start, targ_ra, targ_dec)"
+    #     )
+    #     self.cur.execute(
+    #         "CREATE INDEX IF NOT EXISTS idx_map_keys  ON roll_map(start, targ_ra, targ_dec)"
+    #     )
+    #     self.conn.commit()
 
-        # 3) update matching rows (fills duplicates in main table too)
-        self.cur.execute(
-            f"""
-        UPDATE {self.table_name}
-        SET targ_rll = (
-        SELECT m.targ_rll
-        FROM roll_map m
-        WHERE m.jd0 = {self.table_name}.jd0
-            AND m.targ_ra    = {self.table_name}.targ_ra
-            AND m.targ_dec   = {self.table_name}.targ_dec
-        )
-        WHERE EXISTS (
-        SELECT 1
-        FROM roll_map m
-        WHERE m.jd0 = {self.table_name}.jd0
-            AND m.targ_ra    = {self.table_name}.targ_ra
-            AND m.targ_dec   = {self.table_name}.targ_dec
-        );
-        """
-        )
-        self.conn.commit()
-        self.cur.execute("DROP TABLE IF EXISTS roll_map")
-        self.conn.commit()
+    #     # 3) update matching rows (fills duplicates in main table too)
+    #     self.cur.execute(
+    #         f"""
+    #     UPDATE {self.table_name}
+    #     SET targ_rll = (
+    #     SELECT m.targ_rll
+    #     FROM roll_map m
+    #     WHERE m.start = {self.table_name}.start
+    #         AND m.targ_ra    = {self.table_name}.targ_ra
+    #         AND m.targ_dec   = {self.table_name}.targ_dec
+    #     )
+    #     WHERE EXISTS (
+    #     SELECT 1
+    #     FROM roll_map m
+    #     WHERE m.start = {self.table_name}.start
+    #         AND m.targ_ra    = {self.table_name}.targ_ra
+    #         AND m.targ_dec   = {self.table_name}.targ_dec
+    #     );
+    #     """
+    #     )
+    #     self.conn.commit()
+    #     self.cur.execute("DROP TABLE IF EXISTS roll_map")
+    #     self.conn.commit()
+
+
+# adding Roll
+# adding Comment
+# adding Hashkey comment
+
+# email aurora meca mike emily the example L1 manifest.
+# email same about the directory structure expectations on the supercomputer
+# run the database on supercomputer to give correct directory structure
+# set up a DPC-DAC meeting each week for data delivery hand off
 
 
 class ArchiveDataBaseMixins:
     def to_archive_manifest(self):
         logger.info(f"Creating Level {self.level} archive manifest.")
         manifest_path = (
-            locals()[f"LEVEL{self.level}_DIR"] + "/" + f"level{self.level}_manifest.csv"
+            globals()[f"LEVEL{self.level}_DIR"]
+            + "/"
+            + f"level{self.level}_manifest.csv"
         )
         columns = [
             "Target Name",
             "RA",
             "Dec",
+            "Roll",
             "Obs. Date Start UT",
             "Obs. Date Start",
             "Obs. Date End UT",
@@ -178,6 +191,7 @@ class ArchiveDataBaseMixins:
             "Filename",
             "Processing Date",
             "Delivery Date",
+            "DPC Hashkey",
         ]
         df = self.to_pandas()
         df["lvlfilepath"] = df.lvldir + "/" + df.lvlfilename
@@ -193,6 +207,8 @@ class ArchiveDataBaseMixins:
                     "targ_id",
                     "targ_ra",
                     "targ_dec",
+                    "targ_rll",
+                    "dpc_hash_key",
                     "jd",
                     "instrmnt",
                     "pfsoftver",
@@ -224,15 +240,17 @@ class ArchiveDataBaseMixins:
                 "targ_id": "Target Name",
                 "targ_ra": "RA",
                 "targ_dec": "Dec",
+                "targ_rll": "Roll",
                 "jd": "Obs. Date Start",
                 "instrmnt": "Detector",
                 "pfsoftver": "Processing version",
                 "lvlfilepath": "Full file path",
+                "dpc_hash_key": "DPC Hashkey",
             },
             axis="columns",
         )
         adf = adf[columns]
+        adf["Comment"] = ""
         logger.info(f"Archive manifest stored at {manifest_path}")
-
         adf.to_csv(manifest_path, index=False)
         return adf

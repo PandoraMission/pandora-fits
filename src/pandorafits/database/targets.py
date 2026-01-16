@@ -2,6 +2,7 @@
 
 import warnings
 import xml.etree.ElementTree as ET
+import numpy as np
 from pathlib import Path
 
 import pandas as pd
@@ -49,24 +50,67 @@ def calendar_to_targets(fname):
         seq_elements = visit_elem.findall("pandora:Observation_Sequence", namespace)
         for seq_elem in seq_elements:
             op = seq_elem.find("pandora:Observational_Parameters", namespace)
-            targ_id = op.find("pandora:Target", namespace).text
+            timing = op.find("pandora:Timing", namespace)
+            start = Time(timing.find("pandora:Start", namespace).text, format="isot").jd
+            end = Time(timing.find("pandora:Start", namespace).text, format="isot").jd
+            priority = op.find("pandora:Priority", namespace).text
             bs = op.find("pandora:Boresight", namespace)
-            targ_ra = bs.find("pandora:RA", namespace).text
-            targ_dec = bs.find("pandora:RA", namespace).text
+            boresight_ra = bs.find("pandora:RA", namespace).text
+            boresight_dec = bs.find("pandora:DEC", namespace).text
+            roll_elem = bs.find("pandora:Roll", namespace)
+            boresight_roll = roll_elem.text if roll_elem is not None else np.nan
+            params = seq_elem.find("pandora:Payload_Parameters", namespace)
+            vis_params = params.find("pandora:AcquireVisCamScienceData", namespace)
+            targ_id = vis_params.find("pandora:TargetID", namespace).text
+            targ_ra = vis_params.find("pandora:TargetRA", namespace).text
+            targ_dec = vis_params.find("pandora:TargetDEC", namespace).text
+
             dfs.append(
                 pd.DataFrame(
-                    [Time(metadata["created"]).jd, targ_id, targ_ra, targ_dec]
+                    [
+                        start,
+                        end,
+                        Time(metadata["created"]).jd,
+                        targ_id,
+                        boresight_ra,
+                        boresight_dec,
+                        boresight_roll,
+                        targ_ra,
+                        targ_dec,
+                        priority,
+                    ]
                 ).T
             )
-    df = (
-        pd.concat(dfs)
-        .drop_duplicates()
-        .rename(
-            {0: "created", 1: "targ_id", 2: "targ_ra", 3: "targ_dec"}, axis="columns"
-        )
-        .reset_index(drop=True)
+    df = pd.concat(dfs)
+    df["visit_start"] = df.groupby(2)[0].transform("min")
+    df["visit_end"] = df.groupby(2)[0].transform("max")
+    df = df.rename(
+        {
+            0: "start",
+            1: "end",
+            2: "created",
+            3: "targ_id",
+            4: "boresight_ra",
+            5: "boresight_dec",
+            6: "boresight_roll",
+            7: "targ_ra",
+            8: "targ_dec",
+            9: "priority",
+        },
+        axis="columns",
+    ).reset_index(drop=True)
+
+    return df.drop_duplicates(
+        [
+            "visit_start",
+            "visit_end",
+            "created",
+            "targ_id",
+            "boresight_ra",
+            "boresight_dec",
+            "boresight_roll",
+        ]
     )
-    return df
 
 
 class TargetDataBase(DataBaseMixins):
@@ -76,10 +120,16 @@ class TargetDataBase(DataBaseMixins):
     db_path = f"{LEVEL0_DIR}/targets.db"
     _sql_key_dict = {
         "filename": "TEXT",
+        "visit_start": "FLOAT",
+        "visit_end": "FLOAT",
         "created": "FLOAT",
         "targ_id": "TEXT",
+        "boresight_ra": "FLOAT",
+        "boresight_dec": "FLOAT",
+        "boresight_roll": "FLOAT",
         "targ_ra": "FLOAT",
         "targ_dec": "FLOAT",
+        "priority": "INT",
         "dpc_hash_key": "TEXT",
     }
 
@@ -88,7 +138,7 @@ class TargetDataBase(DataBaseMixins):
 
     def crawl_and_add(self):
         root = CALENDAR_DIR
-        for cal_type in ["PAN-LONGCAL-TST", "PAN-SCICAL-TST"]:
+        for cal_type in ["PAN-SCICAL-TST"]:
             paths = [
                 str(path)
                 for path in Path(root).rglob(f"*{cal_type}*.xml")
@@ -109,10 +159,16 @@ class TargetDataBase(DataBaseMixins):
             return [
                 (
                     filename.split("/")[-1],
+                    float(df.iloc[idx].visit_start),
+                    float(df.iloc[idx].visit_end),
                     float(df.iloc[idx].created),
                     df.iloc[idx].targ_id,
+                    float(df.iloc[idx].boresight_ra),
+                    float(df.iloc[idx].boresight_dec),
+                    float(df.iloc[idx].boresight_roll),
                     float(df.iloc[idx].targ_ra),
                     float(df.iloc[idx].targ_dec),
+                    int(df.iloc[idx].priority),
                     get_dpc_hashkey(
                         df.iloc[idx].targ_id,
                         float(df.iloc[idx].targ_ra),
@@ -122,18 +178,36 @@ class TargetDataBase(DataBaseMixins):
                 for idx in range(len(df))
             ]
 
-    def add_target(self, targ_id, targ_ra, targ_dec):
+    def add_target(
+        self,
+        created,
+        visit_start,
+        visit_end,
+        targ_id,
+        boresight_ra,
+        boresight_dec,
+        boresight_roll,
+        targ_ra,
+        targ_dec,
+        priority,
+    ):
         sql = """
-            INSERT INTO targets (filename, created, targ_id, targ_ra, targ_dec, dpc_hash_key)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO targets (filename, created, visit_start, visit_end, targ_id, boresight_ra, boresight_dec, boresight_roll, targ_ra, targ_dec, priority, dpc_hash_key)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
         values = (
             "user",
-            Time("1991-07-25 12:00:00").jd,
+            Time(created).jd,
+            Time(visit_start).jd,
+            Time(visit_end).jd,
             str(targ_id),
+            float(boresight_ra),
+            float(boresight_dec),
+            float(boresight_roll),
             float(targ_ra),
             float(targ_dec),
+            int(priority),
             get_dpc_hashkey(str(targ_id), float(targ_ra), float(targ_dec)),
         )
 

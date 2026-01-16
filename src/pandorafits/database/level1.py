@@ -8,9 +8,10 @@ import stat
 import numpy as np
 from astropy.time import Time
 
+from . import DPC_KEYS
 from .. import CRSOFTVER, LEVEL0_DIR, LEVEL1_DIR, __version__, logger
 from ..utils import get_dpc_hashkey
-from .mixins import ArchiveDataBaseMixins, DataBaseMixins
+from .mixins import DataBaseMixins, ArchiveDataBaseMixins
 
 
 class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
@@ -21,68 +22,9 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
     level = 1
     level_dir = LEVEL1_DIR
 
-    _sql_key_dict = {
-        "filename": "TEXT PRIMARY KEY",
-        "lvlfilename": "TEXT",
-        "dir": "TEXT",
-        "lvldir": "TEXT",
-        "crsoftver": "TEXT",
-        "pfsoftver": "TEXT",
-        "finetime": "INT",
-        "corstime": "INT",
-        "jd": "FLOAT",
-        "date": "STR",
-        "exptime": "FLOAT",
-        "dpc_obs_id": "INT",
-        "start": "FLOAT",
-        "instrmnt": "TEXT",
-        "roisizex": "INT",
-        "roisizey": "INT",
-        "roistrtx": "INT",
-        "roistrty": "INT",
-        "next": "INT",
-        "astrometry": "BOOL",
-        "targ_id": "STR",
-        "targ_ra": "FLOAT",
-        "targ_dec": "FLOAT",
-        "targ_rll": "FLOAT",
-        "naxis1": "INT",
-        "naxis2": "INT",
-        "naxis3": "INT",
-        "naxis4": "INT",
-        "badchecksum": "INT",
-        "baddatasum": "INT",
-        "filesize": "FLOAT",
-    }
+    _sql_key_dict = DPC_KEYS
 
     def __init__(self):
-        # self.db_path = f"{self.level_dir}/level{self.level}.db"
-        # self.conn = sqlite3.connect(self.db_path, timeout=120)
-        # self.cur = self.conn.cursor()
-
-        # key_string = ", ".join(
-        #     [f"{key} {item}" for key, item in self._sql_key_dict.items()]
-        # )
-        # self.cur.execute(
-        #     f"""
-        # CREATE TABLE IF NOT EXISTS pointings ({key_string})
-        # """
-        # )
-
-        # key_string = ", ".join([f"{key}" for key, item in self._sql_key_dict.items()])
-        # value_string = ", ".join(["?"] * len(self._sql_key_dict))
-        # self.update_str = f"""INSERT INTO pointings
-        # ({key_string})
-        # VALUES ({value_string})"""
-        # self.conn.commit()
-        # os.chmod(
-        #     self.db_path,
-        #     stat.S_IRUSR
-        #     | stat.S_IWUSR  # owner: read/write
-        #     | stat.S_IRGRP
-        #     | stat.S_IWGRP,  # group: read/write
-        # )
-        # # Add the level0 database in
         super().__init__()
         self.cur.execute(f"ATTACH DATABASE '{LEVEL0_DIR}/level0.db' AS level0")
 
@@ -186,8 +128,8 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
     def get_output_filename(self, filename_or_row):
         if isinstance(filename_or_row, tuple):
             row = filename_or_row
-            t = Time(row[12], format="jd").to_datetime()
-            targ_id, targ_ra, targ_dec = row[20], row[21], row[22]
+            t = Time(row[13], format="jd").to_datetime()
+            targ_id, targ_ra, targ_dec = row[21], row[22], row[23]
             fname = row[0]
         elif isinstance(filename_or_row, str):
             # filename = filename_or_row
@@ -213,8 +155,8 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         return f"{self.level_dir}/{t.year}/{t.month}/{t.day}/{get_dpc_hashkey(targ_id, targ_ra, targ_dec)}/{fname_no_suffix}_v{__version__.replace('.', '-')}_l{self.level}.{suffix}"
 
     def _get_filemap(self):
-        from ..nirda import NIRDALevel0HDUList
         from ..visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
+        from ..nirda import NIRDALevel0HDUList
 
         filemap = {
             "VisSci": VISDALevel0HDUList,
@@ -250,9 +192,9 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
                 self.add_entry(
                     self.process(
                         path,
-                        targ_ra=pointing[0] if pointing[0] is not None else 0,
-                        targ_dec=pointing[1] if pointing[1] is not None else 0,
-                        targ_rll=pointing[2] if pointing[2] is not None else 40,
+                        # targ_ra=pointing[0] if pointing[0] is not None else 0,
+                        # targ_dec=pointing[1] if pointing[1] is not None else 0,
+                        # targ_rll=pointing[2] if pointing[2] is not None else 40,
                     )
                 )
             except:

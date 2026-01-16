@@ -9,7 +9,7 @@ from astropy.table import Table
 from astropy.time import Time
 
 from . import NIRDAReference, __version__, logger
-from .database import AstrometryDataBase
+from .database import AstrometryDataBase, Level0DataBase
 
 
 class ProcessingMixins:
@@ -131,15 +131,25 @@ class ProcessingMixins:
         # For finding targets we tolerate any files that are taken during the same observation or within 30s of the observation.
         time_buffer = 30.0 / 86400.0
         time_range = (self.start_time.jd - time_buffer, self.end_time.jd + time_buffer)
-        with AstrometryDataBase() as db:
+        with Level0DataBase() as db:
             df = db.to_pandas(time_range=time_range)
 
         if len(df) != 0:
-            targ_ra, targ_dec, targ_rll = (
-                df.targ_ra.mode()[0],
-                df.targ_dec.mode()[0],
-                df.targ_rll.mode()[0],
-            )
+            k = ~df["targ_ra"].isin([None])
+            if k.any():
+                targ_ra = df.loc[k, "targ_ra"].mode()[0]
+            else:
+                targ_ra = 0
+            k = ~df["targ_dec"].isin([None])
+            if k.any():
+                targ_dec = df.loc[k, "targ_dec"].mode()[0]
+            else:
+                targ_dec = 0
+            k = ~df["targ_rll"].isin([None])
+            if k.any():
+                targ_rll = df.loc[k, "targ_rll"].mode()[0]
+            else:
+                targ_rll = 40
         else:
             targ_ra, targ_dec, targ_rll = 0, 0, 40
 
@@ -148,11 +158,11 @@ class ProcessingMixins:
                 logger.warning("This file seems to cover multiple targets/pointings.")
             # This should select the most common target ID in the case of many target IDs
             targ_id = df.targ_id.mode()[0]
-            dpc_obs_id = df.dpc_obs_id.mode()[0]
+            dpc_seq_id = df.dpc_seq_id.mode()[0]
             start = df.start.mode()[0]
         else:
             targ_id = "unknown"
-            dpc_obs_id = "unknown"
+            dpc_seq_id = "unknown"
             start = 2454833
 
         update_attr(
@@ -176,9 +186,9 @@ class ProcessingMixins:
             "Target ID/keyword",
         )
         update_attr(
-            "DPCOBSID",
-            dpc_obs_id,
-            "DPC Observation ID",
+            "DPCSEQID",
+            dpc_seq_id,
+            "DPC Obseravation Sequence ID",
         )
         update_attr(
             "SEQSTART",
@@ -205,7 +215,9 @@ class ProcessingMixins:
                 },
                 axis="columns",
             )
-            ast_tab = fits.convenience.table_to_hdu(Table.from_pandas(ast_tab))
+            ast_tab = fits.convenience.table_to_hdu(
+                Table.from_pandas(ast_tab.fillna(np.nan))
+            )
             ast_tab.header.extend(fits.Header([("EXTNAME", "ASTROMETRY", "")]))
             new.append(ast_tab)
 

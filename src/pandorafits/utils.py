@@ -16,6 +16,16 @@ BITPIX_DICT = {
 }
 
 
+# def strip_obs_count(targ_id):
+#     """The SOC want to include a zeropadded integer at the end of all target names.
+#     In case they don't do it for actually all target names, we have this strip function."""
+#     if (targ_id[-4] == ".") & (targ_id[-3:].isnumeric()):
+#         count = int(targ_id.split(".")[-1])
+#     else:
+#         count = 0
+#     return targ_id, count
+
+
 def get_dpc_hashkey(targ_id, ra, dec):
     key = (
         targ_id,

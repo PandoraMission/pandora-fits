@@ -38,6 +38,8 @@ __all__ = [
     "get_status",
     "get_level_database",
     "get_astrometry_database",
+    "get_target_database",
+    "get_level_paths",
 ]
 
 
@@ -309,7 +311,7 @@ def get_status():
         "n_bad_checksum": [get_nbadchecksum(name) for name in names],
         "n_bad_datasum": [get_nbaddatasum(name) for name in names],
         "n_unique_targets": [get_ntargets(name) for name in names],
-        "n_unique_pointings": [get_npointings(name) for name in names],
+        # "n_unique_pointings": [get_npointings(name) for name in names],
     }
     status = pd.DataFrame.from_dict(r).T
     status.columns = names
@@ -326,3 +328,14 @@ def get_astrometry_database():
     with AstrometryDataBase() as self:
         df = self.to_pandas()
     return df
+
+
+def get_target_database():
+    with TargetDataBase() as self:
+        df = self.to_pandas()
+    return df
+
+
+def get_level_paths(level=0):
+    df = get_level_database(level)
+    return (df.lvldir + "/" + df.lvlfilename).values

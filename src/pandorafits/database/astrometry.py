@@ -6,16 +6,28 @@ import warnings
 from datetime import timedelta
 from pathlib import Path
 
-import numpy as np
+from astropy.io import fits
+from astropy.time import Time
+
+from .. import DATA_DIR, __version__, LEVEL0_DIR
+from ..utils import get_dpc_hashkey
+
+import os
+import warnings
+from datetime import timedelta
+from pathlib import Path
+
 import pandas as pd
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.time import Time
 
 from .. import DATA_DIR, LEVEL0_DIR, __version__
-from ..roll import get_roll
-from ..utils import get_dpc_hashkey
 from .mixins import DataBaseMixins
+from .targets import TargetDataBase
+import numpy as np
+from astropy.coordinates import SkyCoord
+from ..roll import get_roll
 
 
 class AstrometryDataBase(DataBaseMixins):
@@ -28,15 +40,14 @@ class AstrometryDataBase(DataBaseMixins):
         "dir": "TEXT",
         "crsoftver": "TEXT",
         "pfsoftver": "TEXT",
-        "jd0": "FLOAT",
+        "start": "FLOAT",
+        "end": "FLOAT",
         "jd": "FLOAT",
         "exptime": "FLOAT",
-        # "dpc_obs_id": "INT",
-        "dpchashkey": "TEXT",
+        "dpc_hash_key": "TEXT",
         "targ_id": "STR",
         "targ_ra": "FLOAT",
         "targ_dec": "FLOAT",
-        "targ_rll": "FLOAT",
         "has_astrometry": "INT",
         "ra": "FLOAT",
         "dec": "FLOAT",
@@ -110,13 +121,13 @@ class AstrometryDataBase(DataBaseMixins):
                         hdr["CRSOFTV"],
                         __version__,
                         time.jd,
+                        time.jd + ((temp_data[-1][0] / 1e3) / (24.0 * 60.0 * 60.0)),
                         time.jd + ((temp_data[idx][0] / 1e3) / (24.0 * 60.0 * 60.0)),
                         exptime,
                         hashkey,
                         hdr["TARG_ID"],
                         hdr["TARG_RA"],
                         hdr["TARG_DEC"],
-                        -1,
                         int(has_astrometry),
                         astrometry_data[idx][0],
                         astrometry_data[idx][1],
@@ -145,96 +156,68 @@ class AstrometryDataBase(DataBaseMixins):
             self.add_entries(rows)
         self.update_pointings()
 
-    # def _update_dpc_obs_id(self):
-    #     sql = f"""
-    #     WITH changes AS (
-    #     SELECT
-    #         targ_id,
-    #         CASE
-    #         WHEN targ_id = LAG(targ_id) OVER (ORDER BY jd, targ_id)
-    #         THEN 0          -- same target as previous row → same visit
-    #         ELSE 1          -- target changed (or first row) → new visit
-    #         END AS is_new_visit
-    #     FROM {self.table_name}
-    #     ),
-    #     visits AS (
-    #     SELECT
-    #         targ_id,
-    #         SUM(is_new_visit) OVER (ORDER BY jd, targ_id) AS dpc_obs_id
-    #     FROM changes
+    # def _update_roll(self):
+    #     df = pd.read_sql_query(
+    #         f"SELECT start, targ_id, targ_ra, targ_dec, targ_rll FROM {self.table_name} WHERE start = jd and targ_rll is NULL",
+    #         self.conn,
     #     )
-    #     UPDATE {self.table_name}
-    #     SET dpc_obs_id = (
-    #     SELECT dpc_obs_id FROM visits WHERE visits.targ_id = {self.table_name}.targ_id
-    #     );
+    #     with TargetDataBase() as db:
+    #         for idx in df.index:
+    #             query = f"SELECT visit_start, visit_end, targ_id, targ_ra, targ_dec, boresight_roll FROM {db.table_name} WHERE visit_start <= {df.iloc[idx]['start']} AND visit_end >= {df.iloc[idx]['start']} AND targ_id = '{df.iloc[idx]['targ_id']}'"
+    #             targets = pd.read_sql_query(
+    #                 query,
+    #                 db.conn,
+    #             )
+    #             if len(targets) >= 1:
+    #                 df.loc[idx, "targ_rll"] = targets.iloc[0]["boresight_roll"]
+    #                 df.loc[idx, "targ_rll_type"] = "SOC"
+    #             else:
+    #                 df.loc[idx, "targ_rll"] = get_roll(
+    #                     Time(df.loc[idx, "start"], format="jd"),
+    #                     SkyCoord(
+    #                         df.loc[idx, "targ_ra"], df.loc[idx, "targ_dec"], unit="deg"
+    #                     ),
+    #                 )[0].value
+    #                 df.loc[idx, "targ_rll_type"] = "DPC PREDICT"
 
-    #     """
-    #     self.conn.execute(sql)
+    #     # 1) write df to a temp table
+    #     df.to_sql("roll_map", self.conn, if_exists="replace", index=False)
 
-    # def _update_start(self):
-    #     sql = f"""
-    #     WITH filled AS (
-    #     SELECT
-    #         targ_id,
-    #         MIN(jd) OVER (
-    #         PARTITION BY dpc_obs_id
-    #         ORDER BY jd
-    #         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    #         ) AS start_filled
-    #     FROM {self.table_name}
+    #     # 2) (optional but strongly recommended) index the join keys in both tables
+    #     self.cur.execute(
+    #         f"CREATE INDEX IF NOT EXISTS idx_main_keys ON {self.table_name}(start, targ_ra, targ_dec)"
     #     )
-    #     UPDATE {self.table_name}
-    #     SET start = (SELECT start_filled FROM filled WHERE filled.targ_id = {self.table_name}.targ_id)
-    #     """
-    #     self.conn.execute(sql)
+    #     self.cur.execute(
+    #         "CREATE INDEX IF NOT EXISTS idx_map_keys  ON roll_map(start, targ_ra, targ_dec)"
+    #     )
+    #     self.conn.commit()
 
-    def _update_roll(self):
-        df = pd.read_sql_query(
-            f"SELECT jd0, targ_ra, targ_dec FROM {self.table_name} WHERE jd0 = jd",
-            self.conn,
-        )
-        df["targ_rll"] = [
-            get_roll(Time(jd0, format="jd"), SkyCoord(ra, dec, unit="deg"))[0].value
-            for jd0, ra, dec in df.values
-        ]
+    #     # 3) update matching rows (fills duplicates in main table too)
+    #     for attr in ["targ_rll", "targ_rll_type"]:
+    #         self.cur.execute(
+    #             f"""
+    #         UPDATE {self.table_name}
+    #         SET {attr} = (
+    #         SELECT m.{attr}
+    #         FROM roll_map m
+    #         WHERE m.start = {self.table_name}.start
+    #             AND m.targ_ra    = {self.table_name}.targ_ra
+    #             AND m.targ_dec   = {self.table_name}.targ_dec
+    #         )
+    #         WHERE EXISTS (
+    #         SELECT 1
+    #         FROM roll_map m
+    #         WHERE m.start = {self.table_name}.start
+    #             AND m.targ_ra    = {self.table_name}.targ_ra
+    #             AND m.targ_dec   = {self.table_name}.targ_dec
+    #         );
+    #         """
+    #         )
+    #         self.conn.commit()
 
-        # 1) write df to a temp table
-        df.to_sql("roll_map", self.conn, if_exists="replace", index=False)
-
-        # 2) (optional but strongly recommended) index the join keys in both tables
-        self.cur.execute(
-            f"CREATE INDEX IF NOT EXISTS idx_main_keys ON {self.table_name}(jd0, targ_ra, targ_dec)"
-        )
-        self.cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_map_keys  ON roll_map(jd0, targ_ra, targ_dec)"
-        )
-        self.conn.commit()
-
-        # 3) update matching rows (fills duplicates in main table too)
-        self.cur.execute(
-            f"""
-        UPDATE {self.table_name}
-        SET targ_rll = (
-        SELECT m.targ_rll
-        FROM roll_map m
-        WHERE m.jd0 = {self.table_name}.jd0
-            AND m.targ_ra    = {self.table_name}.targ_ra
-            AND m.targ_dec   = {self.table_name}.targ_dec
-        )
-        WHERE EXISTS (
-        SELECT 1
-        FROM roll_map m
-        WHERE m.jd0 = {self.table_name}.jd0
-            AND m.targ_ra    = {self.table_name}.targ_ra
-            AND m.targ_dec   = {self.table_name}.targ_dec
-        );
-        """
-        )
-        self.conn.commit()
-        self.cur.execute("DROP TABLE IF EXISTS roll_map")
-        self.conn.commit()
+    #     self.cur.execute("DROP TABLE IF EXISTS roll_map")
+    #     self.conn.commit()
 
     def update_pointings(self):
-        # self._update_dpc_obs_id()
-        # self._update_start()
-        self._update_roll()
+        # self._update_roll()
+        return
