@@ -6,28 +6,15 @@ import warnings
 from datetime import timedelta
 from pathlib import Path
 
-from astropy.io import fits
-from astropy.time import Time
-
-from .. import DATA_DIR, __version__, LEVEL0_DIR
-from ..utils import get_dpc_hashkey
-
-import os
-import warnings
-from datetime import timedelta
-from pathlib import Path
-
+import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.time import Time
 
 from .. import DATA_DIR, LEVEL0_DIR, __version__
+from ..utils import get_dpc_hashkey
 from .mixins import DataBaseMixins
-from .targets import TargetDataBase
-import numpy as np
-from astropy.coordinates import SkyCoord
-from ..roll import get_roll
 
 
 class AstrometryDataBase(DataBaseMixins):

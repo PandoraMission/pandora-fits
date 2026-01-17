@@ -110,27 +110,18 @@ class ProcessingMixins:
         logger.info("Appended error extension")
         return
 
-    def to_level1(self, upcast=True, **kwargs):
-        if self.level >= 1:
-            raise ValueError("This is a Level 1 Product.")
-
-        new = self.copy()
-
-        new[0].header["PFSOFTV"] = __version__
-
+    def _update_pointing_params(self):
         def update_attr(name, value, comment=None):
             if value is not None:
-                if name in new[0].header:
-                    if new[0].header[name] not in [None, ""]:
+                if name in self[0].header:
+                    if self[0].header[name] not in [None, ""]:
                         # Do not overwrite existing keywords
                         return
-                new[0].header[name] = (value, comment)
-            elif (value is None) & (name not in new[0].header):
-                new[0].header[name] = (0, comment)
+                self[0].header[name] = (value, comment)
+            elif (value is None) & (name not in self[0].header):
+                self[0].header[name] = (0, comment)
 
-        # For finding targets we tolerate any files that are taken during the same observation or within 30s of the observation.
-        time_buffer = 30.0 / 86400.0
-        time_range = (self.start_time.jd - time_buffer, self.end_time.jd + time_buffer)
+        time_range = (self.start_time.jd, self.end_time.jd)
         with Level0DataBase() as db:
             df = db.to_pandas(time_range=time_range)
 
@@ -195,16 +186,18 @@ class ProcessingMixins:
             start,
             "DPC Observation Sequence Start",
         )
-        # This header keyword set isn't fitting in FITS conventions so we're renaming them if present.
-        # We switch it out to "UNIT"
-        for key in ["TTYPE1", "TFORM1", "TUNIT1"]:
-            if key in new[1].header:
-                new[1].header.remove(key)
 
-        new[1].header["UNIT"] = "COUNTS"
-        new[1].header["PFSOFTV"] = __version__
-
+    def _update_astrometry_extension(self):
+        # For finding targets we tolerate any files that are taken during the same observation or within 30s of the observation.
         if "ASTROMETRY" not in self:
+            time_buffer = 30.0 / 86400.0
+            time_range = (
+                self.start_time.jd - time_buffer,
+                self.end_time.jd + time_buffer,
+            )
+            with AstrometryDataBase() as db:
+                df = db.to_pandas(time_range=time_range)
+
             # Here we add the astrometry information to any file that can have it, but we won't overwrite it if it exists.
             ast_tab = df[["jd", "ra", "dec", "roll"]].rename(
                 {
@@ -219,8 +212,27 @@ class ProcessingMixins:
                 Table.from_pandas(ast_tab.fillna(np.nan))
             )
             ast_tab.header.extend(fits.Header([("EXTNAME", "ASTROMETRY", "")]))
-            new.append(ast_tab)
+            self.append(ast_tab)
+        else:
+            return
 
+    def to_level1(self, upcast=True, **kwargs):
+        if self.level >= 1:
+            raise ValueError("This is a Level 1 Product.")
+
+        new = self.copy()
+
+        new[0].header["PFSOFTV"] = __version__
+
+        # This header keyword set isn't fitting in FITS conventions so we're renaming them if present.
+        # We switch it out to "UNIT"
+        for key in ["TTYPE1", "TFORM1", "TUNIT1"]:
+            if key in new[1].header:
+                new[1].header.remove(key)
+
+        new[1].header["UNIT"] = "COUNTS"
+        new[1].header["PFSOFTV"] = __version__
+        new._update_pointing_params()
         new[0].header["PFCLASS"] = new.__class__.__name__.replace(
             f"{self.level}", f"{self.level + 1}"
         )

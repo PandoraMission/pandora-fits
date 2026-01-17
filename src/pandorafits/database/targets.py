@@ -2,9 +2,9 @@
 
 import warnings
 import xml.etree.ElementTree as ET
-import numpy as np
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from astropy.time import Time
 
@@ -192,7 +192,8 @@ class TargetDataBase(DataBaseMixins):
         priority,
     ):
         sql = """
-            INSERT INTO targets (filename, created, visit_start, visit_end, targ_id, boresight_ra, boresight_dec, boresight_roll, targ_ra, targ_dec, priority, dpc_hash_key)
+            INSERT INTO targets (filename, created, visit_start, visit_end, targ_id, boresight_ra,
+            boresight_dec, boresight_roll, targ_ra, targ_dec, priority, dpc_hash_key)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 

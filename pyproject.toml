@@ -28,6 +28,7 @@ black = "^25.11.0"
 jupyterlab = "^4.5.0"
 flake8 = "^7.3.0"
 matplotlib = ">=2"
+pylint = "<=4.0.4"
 
 
 [build-system]

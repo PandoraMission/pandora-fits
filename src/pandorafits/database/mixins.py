@@ -7,12 +7,10 @@ from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
-from astropy.coordinates import SkyCoord
 from astropy.time import Time
 
 from .. import logger  # noqa
 from .. import LEVEL0_DIR, LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR  # noqa
-from ..roll import get_roll
 
 
 def _process_time(time):

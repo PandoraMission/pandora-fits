@@ -121,6 +121,35 @@ doc = ["doc8", "sphinx (>=7.0.0)", "sphinx-autobuild", "sphinx-autodoc-typehints
 test = ["dateparser (==1.*)", "pre-commit", "pytest", "pytest-cov", "pytest-mock", "pytz (==2025.2)", "simplejson (==3.*)"]
 
 [[package]]
+name = "astroid"
+version = "3.3.11"
+description = "An abstract syntax tree for Python with inference support."
+optional = false
+python-versions = ">=3.9.0"
+groups = ["dev"]
+markers = "python_version < \"3.11\""
+files = [
+    {file = "astroid-3.3.11-py3-none-any.whl", hash = "sha256:54c760ae8322ece1abd213057c4b5bba7c49818853fc901ef09719a60dbf9dec"},
+    {file = "astroid-3.3.11.tar.gz", hash = "sha256:1e5a5011af2920c7c67a53f65d536d65bfa7116feeaf2354d8b94f29573bb0ce"},
+]
+
+[package.dependencies]
+typing-extensions = {version = ">=4", markers = "python_version < \"3.11\""}
+
+[[package]]
+name = "astroid"
+version = "4.0.3"
+description = "An abstract syntax tree for Python with inference support."
+optional = false
+python-versions = ">=3.10.0"
+groups = ["dev"]
+markers = "python_version >= \"3.11\""
+files = [
+    {file = "astroid-4.0.3-py3-none-any.whl", hash = "sha256:864a0a34af1bd70e1049ba1e61cee843a7252c826d97825fcee9b2fcbd9e1b14"},
+    {file = "astroid-4.0.3.tar.gz", hash = "sha256:08d1de40d251cc3dc4a7a12726721d475ac189e4e583d596ece7422bc176bda3"},
+]
+
+[[package]]
 name = "astropy"
 version = "6.0.1"
 description = "Astronomy and astrophysics core library"
@@ -1139,6 +1168,22 @@ files = [
 ]
 
 [[package]]
+name = "dill"
+version = "0.4.0"
+description = "serialize all of Python"
+optional = false
+python-versions = ">=3.8"
+groups = ["dev"]
+files = [
+    {file = "dill-0.4.0-py3-none-any.whl", hash = "sha256:44f54bf6412c2c8464c14e8243eb163690a9800dbe2c367330883b19c7561049"},
+    {file = "dill-0.4.0.tar.gz", hash = "sha256:0633f1d2df477324f53a895b02c901fb961bdbf65a17122586ea7019292cbcf0"},
+]
+
+[package.extras]
+graph = ["objgraph (>=1.7.2)"]
+profile = ["gprof2dot (>=2022.7.29)"]
+
+[[package]]
 name = "et-xmlfile"
 version = "2.0.0"
 description = "An implementation of lxml.xmlfile for the standard library"
@@ -1754,6 +1799,43 @@ files = [
 
 [package.dependencies]
 arrow = ">=0.15.0"
+
+[[package]]
+name = "isort"
+version = "6.1.0"
+description = "A Python utility / library to sort Python imports."
+optional = false
+python-versions = ">=3.9.0"
+groups = ["dev"]
+markers = "python_version < \"3.11\""
+files = [
+    {file = "isort-6.1.0-py3-none-any.whl", hash = "sha256:58d8927ecce74e5087aef019f778d4081a3b6c98f15a80ba35782ca8a2097784"},
+    {file = "isort-6.1.0.tar.gz", hash = "sha256:9b8f96a14cfee0677e78e941ff62f03769a06d412aabb9e2a90487b3b7e8d481"},
+]
+
+[package.dependencies]
+importlib-metadata = {version = ">=4.6.0", markers = "python_version < \"3.10\""}
+
+[package.extras]
+colors = ["colorama"]
+plugins = ["setuptools"]
+
+[[package]]
+name = "isort"
+version = "7.0.0"
+description = "A Python utility / library to sort Python imports."
+optional = false
+python-versions = ">=3.10.0"
+groups = ["dev"]
+markers = "python_version >= \"3.11\""
+files = [
+    {file = "isort-7.0.0-py3-none-any.whl", hash = "sha256:1bcabac8bc3c36c7fb7b98a76c8abb18e0f841a3ba81decac7691008592499c1"},
+    {file = "isort-7.0.0.tar.gz", hash = "sha256:5513527951aadb3ac4292a41a16cbc50dd1642432f5e8c20057d414bdafb4187"},
+]
+
+[package.extras]
+colors = ["colorama"]
+plugins = ["setuptools"]
 
 [[package]]
 name = "jedi"
@@ -3231,8 +3313,8 @@ files = [
 [package.dependencies]
 numpy = [
     {version = ">=1.22.4", markers = "python_version < \"3.11\""},
-    {version = ">=1.23.2", markers = "python_version == \"3.11\""},
     {version = ">=1.26.0", markers = "python_version >= \"3.12\""},
+    {version = ">=1.23.2", markers = "python_version == \"3.11\""},
 ]
 python-dateutil = ">=2.8.2"
 pytz = ">=2020.1"
@@ -3832,6 +3914,63 @@ files = [
 
 [package.extras]
 windows-terminal = ["colorama (>=0.4.6)"]
+
+[[package]]
+name = "pylint"
+version = "3.3.9"
+description = "python code static checker"
+optional = false
+python-versions = ">=3.9.0"
+groups = ["dev"]
+markers = "python_version < \"3.11\""
+files = [
+    {file = "pylint-3.3.9-py3-none-any.whl", hash = "sha256:01f9b0462c7730f94786c283f3e52a1fbdf0494bbe0971a78d7277ef46a751e7"},
+    {file = "pylint-3.3.9.tar.gz", hash = "sha256:d312737d7b25ccf6b01cc4ac629b5dcd14a0fcf3ec392735ac70f137a9d5f83a"},
+]
+
+[package.dependencies]
+astroid = ">=3.3.8,<=3.4.0.dev0"
+colorama = {version = ">=0.4.5", markers = "sys_platform == \"win32\""}
+dill = {version = ">=0.2", markers = "python_version < \"3.11\""}
+isort = ">=4.2.5,<5.13 || >5.13,<7"
+mccabe = ">=0.6,<0.8"
+platformdirs = ">=2.2"
+tomli = {version = ">=1.1", markers = "python_version < \"3.11\""}
+tomlkit = ">=0.10.1"
+typing-extensions = {version = ">=3.10", markers = "python_version < \"3.10\""}
+
+[package.extras]
+spelling = ["pyenchant (>=3.2,<4.0)"]
+testutils = ["gitpython (>3)"]
+
+[[package]]
+name = "pylint"
+version = "4.0.4"
+description = "python code static checker"
+optional = false
+python-versions = ">=3.10.0"
+groups = ["dev"]
+markers = "python_version >= \"3.11\""
+files = [
+    {file = "pylint-4.0.4-py3-none-any.whl", hash = "sha256:63e06a37d5922555ee2c20963eb42559918c20bd2b21244e4ef426e7c43b92e0"},
+    {file = "pylint-4.0.4.tar.gz", hash = "sha256:d9b71674e19b1c36d79265b5887bf8e55278cbe236c9e95d22dc82cf044fdbd2"},
+]
+
+[package.dependencies]
+astroid = ">=4.0.2,<=4.1.dev0"
+colorama = {version = ">=0.4.5", markers = "sys_platform == \"win32\""}
+dill = [
+    {version = ">=0.3.7", markers = "python_version >= \"3.12\""},
+    {version = ">=0.3.6", markers = "python_version == \"3.11\""},
+]
+isort = ">=5,<5.13 || >5.13,<8"
+mccabe = ">=0.6,<0.8"
+platformdirs = ">=2.2"
+tomlkit = ">=0.10.1"
+
+[package.extras]
+spelling = ["pyenchant (>=3.2,<4.0)"]
+testutils = ["gitpython (>3)"]
 
 [[package]]
 name = "pyparsing"
@@ -5037,6 +5176,18 @@ files = [
 ]
 
 [[package]]
+name = "tomlkit"
+version = "0.14.0"
+description = "Style preserving TOML library"
+optional = false
+python-versions = ">=3.9"
+groups = ["dev"]
+files = [
+    {file = "tomlkit-0.14.0-py3-none-any.whl", hash = "sha256:592064ed85b40fa213469f81ac584f67a4f2992509a7c3ea2d632208623a3680"},
+    {file = "tomlkit-0.14.0.tar.gz", hash = "sha256:cf00efca415dbd57575befb1f6634c4f42d2d87dbba376128adb42c121b87064"},
+]
+
+[[package]]
 name = "tornado"
 version = "6.5.2"
 description = "Tornado is a Python web framework and asynchronous networking library, originally developed at FriendFeed."
@@ -5244,4 +5395,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "1b4d6fc595bb31d60f3632e30f3a6f269a4ab1d2fc6d747ab2203cf29456e1da"
+content-hash = "707460edd1d737b6a20220486682ff5228d2675274df2ecc929e5d63c555ad40"

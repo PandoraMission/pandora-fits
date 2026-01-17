@@ -16,11 +16,11 @@ from astropy.time import Time
 
 from .. import DATA_DIR, LEVEL0_DIR, __version__, logger
 from ..roll import get_roll
+from ..utils import get_dpc_hashkey
+from . import DPC_KEYS
 from .astrometry import AstrometryDataBase
 from .mixins import DataBaseMixins
 from .targets import TargetDataBase
-from ..utils import get_dpc_hashkey
-from . import DPC_KEYS
 
 
 class Level0DataBase(DataBaseMixins):
@@ -489,11 +489,13 @@ class Level0DataBase(DataBaseMixins):
     def _update_dpc_hash_key(self):
         self.cur = self.conn.cursor()
 
-        self.cur.execute("""
+        self.cur.execute(
+            """
             SELECT DISTINCT targ_id, targ_ra, targ_dec
             FROM pointings
             WHERE dpc_hash_key IS NULL
-        """)
+        """
+        )
 
         rows = self.cur.fetchall()
         hash_rows = []

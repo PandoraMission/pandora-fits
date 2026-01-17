@@ -311,7 +311,7 @@ def get_status():
         "n_bad_checksum": [get_nbadchecksum(name) for name in names],
         "n_bad_datasum": [get_nbaddatasum(name) for name in names],
         "n_unique_targets": [get_ntargets(name) for name in names],
-        # "n_unique_pointings": [get_npointings(name) for name in names],
+        "n_unique_pointings": [get_npointings(name) for name in names],
     }
     status = pd.DataFrame.from_dict(r).T
     status.columns = names
