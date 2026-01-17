@@ -1,3 +1,4 @@
+# Third-party
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -9,7 +10,7 @@ from . import FORMATSDIR, VISDAReference, logger
 from .fits import PandoraHDUList
 from .io import register_hdulist
 from .report import ReportMixins
-from .reshape import list_to_panels, panels_to_cube, panels_to_list
+from .reshape import array_to_panels, panels_to_array, panels_to_cube
 from .scene import get_VISDA_scene, get_VISDAFFI_scene
 
 __all__ = [
@@ -68,15 +69,21 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
 
     @property
     def data_cube(self):
-        return panels_to_cube(self[1].data, nROI=self.nROI, ROI_size=self.ROI_size)
+        return panels_to_cube(
+            self[1].data, nROI=self.nROI, ROI_size=self.ROI_size
+        )
 
     @property
     def data_list(self):
-        return panels_to_list(self[1].data, nROI=self.nROI, ROI_size=self.ROI_size)
+        return panels_to_array(
+            self[1].data, nROI=self.nROI, ROI_size=self.ROI_size
+        )
 
     @property
     def list_row(self):
-        row = np.asarray([r + np.arange(self.ROI_size[0]) for r, _ in self.ROI_corners])
+        row = np.asarray(
+            [r + np.arange(self.ROI_size[0]) for r, _ in self.ROI_corners]
+        )
         row = row[:, :, None] * np.ones((1, *self.ROI_size), dtype=int)
         return row
 
@@ -90,13 +97,13 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
 
     @property
     def panel_row(self):
-        R = list_to_panels(self.list_row.astype(float), border=self.border)
+        R = array_to_panels(self.list_row.astype(float), border=self.border)
         R[self.border_mask] = np.nan
         return R
 
     @property
     def panel_column(self):
-        R = list_to_panels(self.list_column.astype(float), border=self.border)
+        R = array_to_panels(self.list_column.astype(float), border=self.border)
         R[self.border_mask] = np.nan
         return R
 
@@ -217,7 +224,9 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
         pri.header["NUMSTARS"] = 1
         hdulists = []
         for tdx in range(self.nROI):
-            im1 = fits.ImageHDU(self.data_list[:, tdx, :, :], self[1].header[10:])
+            im1 = fits.ImageHDU(
+                self.data_list[:, tdx, :, :], self[1].header[10:]
+            )
             tab1 = fits.TableHDU(self[2].data[[tdx]], self[2].header)
             hdulist = fits.HDUList([pri, im1, tab1, self[3], self[4]])
             hdulist = VISDALevel1HDUList(hdulist)
@@ -238,9 +247,12 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
     def _get_aperture_and_catalog(self, scene):
         cataloghdu = scene.get_catalog_hdu()
         df = Table(cataloghdu.data).to_pandas()
-        aper, df["contamination"], df["completeness"], df["total_in_aperture"] = (
-            scene.get_all_apertures()
-        )
+        (
+            aper,
+            df["contamination"],
+            df["completeness"],
+            df["total_in_aperture"],
+        ) = scene.get_all_apertures()
         hdr = fits.Header(
             [
                 fits.Card(*c)
@@ -269,8 +281,9 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
             ]
         )
         aperturehdu = fits.CompImageHDU(
-            data=list_to_panels(
-                aper if aper.ndim == 4 else aper[:, None, :, :], border=self.border
+            data=array_to_panels(
+                aper if aper.ndim == 4 else aper[:, None, :, :],
+                border=self.border,
             ).astype(np.int16),
             name="APERTURE",
             header=hdr,
@@ -289,7 +302,7 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
         modelhdu = scene.get_model_hdu()
         self.append(
             fits.ImageHDU(
-                list_to_panels(
+                array_to_panels(
                     (
                         modelhdu.data
                         if modelhdu.data.ndim == 3

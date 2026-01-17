@@ -1,7 +1,9 @@
 """Functions for processing data"""
 
+# Standard library
 from copy import deepcopy
 
+# Third-party
 import astropy.units as u
 import numpy as np
 from astropy.io import fits
@@ -41,6 +43,13 @@ class ProcessingMixins:
         value = self._get_reference_detector_image(name)
         self["SCIENCE"].data = func(self["SCIENCE"].data, value)
         self[0].header["COMMENT"] = f"Applied {name}."
+
+    def _cast_to_float(self):
+        logger.info("Casting data to float.")
+        self[1] = fits.CompImageHDU(
+            self[1].data.astype(float), header=self[1].header
+        )
+        self[0].header["COMMENT"] = "Cast data to float."
 
     def _subtract_bias(self):
         logger.info("Subtracting bias")
@@ -99,7 +108,10 @@ class ProcessingMixins:
         error = np.abs(self["science"].data) ** 0.5
         # This is one possible noise. Again, we'll do better after commissioning
         readnoise = (
-            ((self.reference.get_readnoise() ** 2 * self.ncoadds) ** 0.5 * u.pixel)
+            (
+                (self.reference.get_readnoise() ** 2 * self.ncoadds) ** 0.5
+                * u.pixel
+            )
             .to(u.electron)
             .value
         )
@@ -146,7 +158,9 @@ class ProcessingMixins:
 
         if len(df) > 0:
             if len(df.targ_id.unique()) != 1:
-                logger.warning("This file seems to cover multiple targets/pointings.")
+                logger.warning(
+                    "This file seems to cover multiple targets/pointings."
+                )
             # This should select the most common target ID in the case of many target IDs
             targ_id = df.targ_id.mode()[0]
             dpc_seq_id = df.dpc_seq_id.mode()[0]
@@ -236,7 +250,10 @@ class ProcessingMixins:
         new[0].header["PFCLASS"] = new.__class__.__name__.replace(
             f"{self.level}", f"{self.level + 1}"
         )
-        new[0].header["PFTIME"] = (Time.now().isot, "Pandora DPC Processing Time")
+        new[0].header["PFTIME"] = (
+            Time.now().isot,
+            "Pandora DPC Processing Time",
+        )
         if upcast:
             new = new.__to_l1__()
         return new
@@ -245,8 +262,7 @@ class ProcessingMixins:
         if self.level >= 2:
             raise ValueError("This is a Level 2 Product.")
         new = self.copy()
-        new[1] = fits.CompImageHDU(new[1].data.astype(float), header=new[1].header)
-        new[0].header["COMMENT"] = "Cast data to float."
+        new._cast_to_float()
         new._subtract_bias()
         new._subtract_dark()
         new._divide_flat()
@@ -264,10 +280,16 @@ class ProcessingMixins:
             wavtab = fits.TableHDU.from_columns(
                 [
                     fits.Column(
-                        "wavelength", "D", array=wav.value, unit=wav.unit.to_string()
+                        "wavelength",
+                        "D",
+                        array=wav.value,
+                        unit=wav.unit.to_string(),
                     ),
                     fits.Column(
-                        "sensitivity", "D", array=sens.value, unit=sens.unit.to_string()
+                        "sensitivity",
+                        "D",
+                        array=sens.value,
+                        unit=sens.unit.to_string(),
                     ),
                 ],
                 name="WAVELENGTH",
@@ -277,7 +299,10 @@ class ProcessingMixins:
         new[0].header["PFCLASS"] = new.__class__.__name__.replace(
             f"{self.level}", f"{self.level + 1}"
         )
-        new[0].header["PFTIME"] = (Time.now().isot, "Pandora DPC Processing Time")
+        new[0].header["PFTIME"] = (
+            Time.now().isot,
+            "Pandora DPC Processing Time",
+        )
 
         if upcast:
             new = new.__to_l2__()

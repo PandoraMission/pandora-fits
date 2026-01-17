@@ -1,8 +1,10 @@
+# Third-party
 import astropy.units as u
 import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 
+# First-party/Local
 from pandorafits.roll import get_roll
 
 

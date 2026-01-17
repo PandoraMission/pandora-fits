@@ -1,11 +1,14 @@
 """Deal with opening files nicely"""
 
+# Future
 from __future__ import annotations
 
+# Standard library
 import functools
 import inspect
 from typing import Callable, List, Tuple, Type
 
+# Third-party
 from astropy.io import fits
 
 Predicate = Callable[[fits.HDUList], bool]

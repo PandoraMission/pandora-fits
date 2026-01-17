@@ -1,3 +1,4 @@
+# Third-party
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.coordinates import SkyCoord
@@ -38,7 +39,9 @@ class NIRDALevel0HDUList(PandoraHDUList):
         k = d != 0
         vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1))
         vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1) + 100)
-        im = ax.pcolormesh(self.column, self.row, d, vmin=vmin, vmax=vmax, **kwargs)
+        im = ax.pcolormesh(
+            self.column, self.row, d, vmin=vmin, vmax=vmax, **kwargs
+        )
         ax.set(
             aspect="equal",
             title=f"{self[0].header['targ_id']} {self.start_time.isot}",

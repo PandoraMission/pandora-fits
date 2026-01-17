@@ -1,14 +1,19 @@
 """Module to deal with SC roll"""
 
+# Third-party
 import astropy.units as u
 import numpy as np
 from astropy.coordinates import SkyCoord, get_sun
 from astropy.time import Time
 
+from .docstrings import add_docstring
+
 __all__ = ["get_roll"]
 
 
+@add_docstring(parameters=["time", "target"], returns="roll")
 def get_roll(time: Time, target: SkyCoord):
+    """Calculate the expected roll that Pandora SOC should command to obey flight rules for a given observation time and target."""
     target_vec = target.cartesian.get_xyz().value
     if target_vec.ndim == 1:
         target_vec = target_vec[None, :]
@@ -34,7 +39,9 @@ def get_roll(time: Time, target: SkyCoord):
 
     # Celestial north in ECI (equatorial frame) is +Z_ECI
     north = np.array([0.0, 0.0, 1.0])
-    north_proj = north[None, :] - np.dot(target_vec, north)[:, None] * target_vec
+    north_proj = (
+        north[None, :] - np.dot(target_vec, north)[:, None] * target_vec
+    )
 
     # reference axes for roll angle calculation
 

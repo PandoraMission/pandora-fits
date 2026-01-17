@@ -1,7 +1,9 @@
+# Standard library
 import logging
 import os
 import shutil
 
+# Third-party
 import numpy as np
 import pandas as pd
 
@@ -214,7 +216,9 @@ def delete_level3filestorage():
 def delete_logs():
     logger.info("Running `delete_logs`")
     current_logfile = next(
-        h.baseFilename for h in logger.handlers if isinstance(h, logging.FileHandler)
+        h.baseFilename
+        for h in logger.handlers
+        if isinstance(h, logging.FileHandler)
     )
     # Ensure directory exists
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -264,7 +268,9 @@ def get_status():
 
     def get_npointings(name):
         with globals()[name]() as self:
-            self.cur.execute(f"""SELECT COUNT(DISTINCT start) FROM {self.table_name}""")
+            self.cur.execute(
+                f"""SELECT COUNT(DISTINCT start) FROM {self.table_name}"""
+            )
             nrows = self.cur.fetchone()[0]
         return nrows
 
@@ -298,12 +304,16 @@ def get_status():
     def get_nbaddatasum(name):
         with globals()[name]() as self:
             self.cur.execute(
-                f"""SELECT COUNT() FROM {self.table_name} WHERE baddatasum != ?""", (0,)
+                f"""SELECT COUNT() FROM {self.table_name} WHERE baddatasum != ?""",
+                (0,),
             )
             nrows = self.cur.fetchone()[0]
         return nrows
 
-    names = ["AstrometryDataBase", *[f"Level{level}DataBase" for level in np.arange(4)]]
+    names = [
+        "AstrometryDataBase",
+        *[f"Level{level}DataBase" for level in np.arange(4)],
+    ]
     r = {
         "n_row_s": [get_nrows(name) for name in names],
         "n_bad_crsoftver": [get_nbadcrsoftver(name) for name in names],

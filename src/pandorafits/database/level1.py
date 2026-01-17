@@ -1,10 +1,12 @@
 # flake8: noqa W291
 """Tools for keeping a database of pandora files"""
 
+# Standard library
 import os
 import sqlite3
 import stat
 
+# Third-party
 import numpy as np
 from astropy.time import Time
 
@@ -45,7 +47,9 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         nrows = self.cur.fetchone()[0]
         return nrows
 
-    def get_x_to_process(self, x, crsoftver=CRSOFTVER, nchunks=None, chunk=None):
+    def get_x_to_process(
+        self, x, crsoftver=CRSOFTVER, nchunks=None, chunk=None
+    ):
         # Compute limit/offset if chunking is requested
         if nchunks is not None and chunk is not None:
             # total files
@@ -81,7 +85,9 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         else:
             return []
 
-    def get_files_to_process(self, crsoftver=CRSOFTVER, nchunks=None, chunk=None):
+    def get_files_to_process(
+        self, crsoftver=CRSOFTVER, nchunks=None, chunk=None
+    ):
         files = self.get_x_to_process(
             x="src.lvldir, src.lvlfilename",
             crsoftver=crsoftver,
@@ -95,7 +101,9 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
             x="COUNT()", crsoftver=crsoftver, nchunks=None, chunk=None
         )[0]
 
-    def get_pointings_to_process(self, crsoftver=CRSOFTVER, nchunks=None, chunk=None):
+    def get_pointings_to_process(
+        self, crsoftver=CRSOFTVER, nchunks=None, chunk=None
+    ):
         return self.get_x_to_process(
             x="src.targ_ra, src.targ_dec, src.targ_rll",
             crsoftver=crsoftver,
@@ -175,7 +183,9 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         for key, HDUList in filemap.items():
             if key in filename:
                 with HDUList(filename) as hdulist:
-                    hdulist = getattr(hdulist, f"to_level{self.level}")(**kwargs)
+                    hdulist = getattr(hdulist, f"to_level{self.level}")(
+                        **kwargs
+                    )
                     hdulist.writeto(path, overwrite=True, checksum=True)
         logger.info(f"Wrote {filename.split('/')[-1]} to {path}")
         return self.get_entry(filename)

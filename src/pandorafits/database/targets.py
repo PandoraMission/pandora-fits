@@ -1,9 +1,11 @@
 """Tools for generating fallback database of SOC targets"""
 
+# Standard library
 import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+# Third-party
 import numpy as np
 import pandas as pd
 from astropy.time import Time
@@ -47,20 +49,30 @@ def calendar_to_targets(fname):
 
     visit_elements = root.findall("pandora:Visit", namespace)
     for visit_elem in visit_elements:
-        seq_elements = visit_elem.findall("pandora:Observation_Sequence", namespace)
+        seq_elements = visit_elem.findall(
+            "pandora:Observation_Sequence", namespace
+        )
         for seq_elem in seq_elements:
             op = seq_elem.find("pandora:Observational_Parameters", namespace)
             timing = op.find("pandora:Timing", namespace)
-            start = Time(timing.find("pandora:Start", namespace).text, format="isot").jd
-            end = Time(timing.find("pandora:Start", namespace).text, format="isot").jd
+            start = Time(
+                timing.find("pandora:Start", namespace).text, format="isot"
+            ).jd
+            end = Time(
+                timing.find("pandora:Start", namespace).text, format="isot"
+            ).jd
             priority = op.find("pandora:Priority", namespace).text
             bs = op.find("pandora:Boresight", namespace)
             boresight_ra = bs.find("pandora:RA", namespace).text
             boresight_dec = bs.find("pandora:DEC", namespace).text
             roll_elem = bs.find("pandora:Roll", namespace)
-            boresight_roll = roll_elem.text if roll_elem is not None else np.nan
+            boresight_roll = (
+                roll_elem.text if roll_elem is not None else np.nan
+            )
             params = seq_elem.find("pandora:Payload_Parameters", namespace)
-            vis_params = params.find("pandora:AcquireVisCamScienceData", namespace)
+            vis_params = params.find(
+                "pandora:AcquireVisCamScienceData", namespace
+            )
             targ_id = vis_params.find("pandora:TargetID", namespace).text
             targ_ra = vis_params.find("pandora:TargetRA", namespace).text
             targ_dec = vis_params.find("pandora:TargetDEC", namespace).text

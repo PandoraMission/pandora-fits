@@ -1,7 +1,9 @@
 """This module helps us cache scenes so we don't waste compute regenerating them between files."""
 
+# Standard library
 from functools import lru_cache
 
+# Third-party
 import numpy as np
 import pandoraaperture as pa
 from astropy.time import Time

@@ -1,5 +1,7 @@
+# Standard library
 import tempfile
 
+# Third-party
 import numpy as np
 import pandas as pd
 from astropy.io import fits
@@ -83,7 +85,10 @@ def hdulist_to_dataframes(hdulist):
 
 
 def hdulist_to_excel(hdulist, filename="output.xlsx"):
-    sheet_names = ["Primary", *[f"Ext{idx}" for idx in np.arange(1, len(hdulist))]]
+    sheet_names = [
+        "Primary",
+        *[f"Ext{idx}" for idx in np.arange(1, len(hdulist))],
+    ]
     dfs = hdulist_to_dataframes(hdulist)
     with pd.ExcelWriter(filename, engine="openpyxl") as writer:
         dfs[0].to_excel(writer, sheet_name="Structure", index=False)

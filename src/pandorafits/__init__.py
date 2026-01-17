@@ -14,9 +14,13 @@ from appdirs import user_config_dir, user_data_dir  # noqa: E402
 # Third-party
 from rich.console import Console  # noqa: E402
 from rich.logging import RichHandler  # noqa: E402
+from glob import glob  # noqa: E402
 
 PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
 FORMATSDIR = f"{PACKAGEDIR}/formats/"
+DOCSDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/docs/"
+TESTDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/tests/"
+PANDORASTYLE = glob(f"{PACKAGEDIR}/data/pandora.mplstyle")
 logger = logging.getLogger("pandorafits")
 
 
@@ -172,7 +176,10 @@ LEVEL1_DIR = config["SETTINGS"]["level1_dir"]
 LEVEL2_DIR = config["SETTINGS"]["level2_dir"]
 LEVEL3_DIR = config["SETTINGS"]["level3_dir"]
 
-[os.makedirs(dir, exist_ok=True) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
+[
+    os.makedirs(dir, exist_ok=True)
+    for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]
+]
 [os.chmod(dir, 0o750) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
 
 
@@ -180,7 +187,9 @@ def display_config() -> pd.DataFrame:
     dfs = []
     for section in config.sections():
         df = pd.DataFrame(
-            np.asarray([(key, value) for key, value in dict(config[section]).items()])
+            np.asarray(
+                [(key, value) for key, value in dict(config[section]).items()]
+            )
         )
         df["section"] = section
         df.columns = ["key", "value", "section"]

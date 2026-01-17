@@ -1,8 +1,10 @@
+# Standard library
 import hashlib
 import random
 import string
 from typing import List, Union
 
+# Third-party
 import numpy as np
 import openpyxl
 import pandas as pd
@@ -40,7 +42,9 @@ def generate_random_table_values(format_code: str, nvalues: int) -> List:
         # Character string
         width = int(format_code[1:])
         return [
-            "".join(random.choices(string.ascii_letters + string.digits, k=width))
+            "".join(
+                random.choices(string.ascii_letters + string.digits, k=width)
+            )
             for n in range(nvalues)
         ]
 
@@ -67,7 +71,9 @@ def generate_random_table_values(format_code: str, nvalues: int) -> List:
             )
             for n in range(nvalues)
         ]
-        return [f"{value[n]:>{width}.{decimal_places}f}" for n in range(nvalues)]
+        return [
+            f"{value[n]:>{width}.{decimal_places}f}" for n in range(nvalues)
+        ]
 
     elif format_code.startswith("E") or format_code.startswith("D"):
         # Exponential floating point
@@ -117,7 +123,9 @@ def generate_random_bintable_values(
         width = int(width_str)
 
         alphabet = string.ascii_letters + string.digits + " _-"
-        return ["".join(random.choices(alphabet, k=width)) for _ in range(nrows)]
+        return [
+            "".join(random.choices(alphabet, k=width)) for _ in range(nrows)
+        ]
 
     # Numeric: allow optional repeat count like "3D" or "10K"
     # If no leading digits, repeat=1.
@@ -129,7 +137,9 @@ def generate_random_bintable_values(
 
     if code == "D":
         # float64
-        arr = np.random.uniform(-1e10, 1e10, size=(nrows, repeat)).astype(np.float64)
+        arr = np.random.uniform(-1e10, 1e10, size=(nrows, repeat)).astype(
+            np.float64
+        )
         return arr[:, 0] if repeat == 1 else arr
 
     if code == "K":
@@ -163,5 +173,7 @@ def get_excel_sheet(fname, extno=0):
     df = pd.DataFrame(rows)
     df.columns = df.loc[0]
     df = df[1:].reset_index(drop=True)
-    df = df[~df.apply(lambda row: row.isnull().all(), axis=1)].reset_index(drop=True)
+    df = df[~df.apply(lambda row: row.isnull().all(), axis=1)].reset_index(
+        drop=True
+    )
     return df

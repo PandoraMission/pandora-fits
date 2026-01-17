@@ -1,7 +1,9 @@
 """Class to handle Pandora fits files"""
 
+# Standard library
 from datetime import timedelta
 
+# Third-party
 import astropy.units as u
 import numpy as np
 from astropy.coordinates import SkyCoord
@@ -80,8 +82,14 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         if isinstance(extname, int):
             extname = self.extension_names[extname.lower()]
         return [
-            fits.Card(d.iloc[0], d.iloc[1] if d.iloc[1] != "" else d.iloc[2], d.iloc[3])
-            for _, d in self.extension_headers[extname.lower()].fillna("").iterrows()
+            fits.Card(
+                d.iloc[0],
+                d.iloc[1] if d.iloc[1] != "" else d.iloc[2],
+                d.iloc[3],
+            )
+            for _, d in self.extension_headers[extname.lower()]
+            .fillna("")
+            .iterrows()
         ]
 
     def _get_mandetory_cards(self, extname):
@@ -89,7 +97,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
             extname = self.extension_names[extname.lower()]
         return [
             fits.Card(d.iloc[0], d.iloc[1], d.iloc[3])
-            for _, d in self.extension_headers[extname.lower()].fillna("").iterrows()
+            for _, d in self.extension_headers[extname.lower()]
+            .fillna("")
+            .iterrows()
         ]
 
     def _validate_ext_types(self):
@@ -104,7 +114,8 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
     def _validate_n_ext(self):
         """Validate that all the necessary extensions are present."""
         k = np.in1d(
-            self.extension_names, [hdu.header["EXTNAME"].lower() for hdu in self]
+            self.extension_names,
+            [hdu.header["EXTNAME"].lower() for hdu in self],
         )
         for name in self.extension_names[~k]:
             if not self.structure[
@@ -125,7 +136,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
             if hdu.header["EXTNAME"] == "PRIMARY":
                 continue
             if isinstance(hdu, fits.ImageHDU):
-                expected_header = fits.Header(self._get_mandetory_cards(extname))
+                expected_header = fits.Header(
+                    self._get_mandetory_cards(extname)
+                )
                 expected_type, expected_type_str = BITPIX_DICT[
                     int(expected_header["bitpix"])
                 ]
@@ -201,7 +214,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
 
     def _get_dummy_hdus(self):
         hdulist = []
-        for extname, exttype in zip(self.extension_names, self.extension_types):
+        for extname, exttype in zip(
+            self.extension_names, self.extension_types
+        ):
             cards = self._get_default_cards(extname)
             hdr = _clean_header_cards(fits.Header(cards))
             data = None
@@ -215,7 +230,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                     ]
                 )
                 if "BSCALE" in hdr:
-                    if (int(hdr["BSCALE"]) == 1) and (int(hdr["BZERO"]) == 2**15):
+                    if (int(hdr["BSCALE"]) == 1) and (
+                        int(hdr["BZERO"]) == 2**15
+                    ):
                         data = np.ones(shape, dtype=np.uint16)
                     else:
                         raise FITSValueException(
@@ -232,7 +249,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                     ]
                 )
                 if "BSCALE" in hdr:
-                    if (int(hdr["BSCALE"]) == 1) and (int(hdr["BZERO"]) == 2**31):
+                    if (int(hdr["BSCALE"]) == 1) and (
+                        int(hdr["BZERO"]) == 2**31
+                    ):
                         data = np.ones(shape, dtype=np.uint32)
                     else:
                         raise FITSValueException(
@@ -249,7 +268,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                     fits.Column(
                         name=hdr[f"TTYPE{idx}"],
                         format=hdr[f"TFORM{idx}"],
-                        unit=hdr[f"TUNIT{idx}"] if f"TUNIT{idx}" in hdr else "",
+                        unit=(
+                            hdr[f"TUNIT{idx}"] if f"TUNIT{idx}" in hdr else ""
+                        ),
                         array=(
                             generate_random_table_values(
                                 hdr[f"TFORM{idx}"], hdr["NAXIS2"]
@@ -270,7 +291,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                     fits.Column(
                         name=hdr[f"TTYPE{idx}"],
                         format=hdr[f"TFORM{idx}"],
-                        unit=hdr[f"TUNIT{idx}"] if f"TUNIT{idx}" in hdr else "",
+                        unit=(
+                            hdr[f"TUNIT{idx}"] if f"TUNIT{idx}" in hdr else ""
+                        ),
                         array=(
                             generate_random_bintable_values(
                                 hdr[f"TFORM{idx}"], hdr["NAXIS2"]
@@ -288,7 +311,11 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                     f"[EXT {hdr['EXTNAME']}] No extension type {exttype}."
                 )
             cards = self._get_mandetory_cards(extname)
-            _ = [hdu.header.append(card) for card in cards if card[0] not in hdu.header]
+            _ = [
+                hdu.header.append(card)
+                for card in cards
+                if card[0] not in hdu.header
+            ]
             hdulist.append(hdu)
         return fits.HDUList(hdulist)
 
@@ -307,9 +334,13 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         }
         # remove optional extensions
         self.structure = self.structure[
-            self.structure["Extension"].str.lower().isin(self.extension_headers.keys())
+            self.structure["Extension"]
+            .str.lower()
+            .isin(self.extension_headers.keys())
         ]
-        self.extension_names = np.asarray(self.structure.Extension.str.lower().values)
+        self.extension_names = np.asarray(
+            self.structure.Extension.str.lower().values
+        )
         self.extension_types = np.asarray(self.structure.Type.values)
 
         if file is None:
@@ -348,7 +379,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
     def targ(self):
         if "TARG_RA" in self[0].header:
             return SkyCoord(
-                self[0].header["TARG_RA"], self[0].header["TARG_DEC"], unit="deg"
+                self[0].header["TARG_RA"],
+                self[0].header["TARG_DEC"],
+                unit="deg",
             )
         else:
             return None
@@ -410,7 +443,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 return (u.millisecond * self[0].header["FRMTIME"]).to(u.second)
             else:
                 return (
-                    u.millisecond * self[0].header["FRMTIME"] * self[0].header["READS"]
+                    u.millisecond
+                    * self[0].header["FRMTIME"]
+                    * self[0].header["READS"]
                 ).to(u.second)
         elif "EXPTIMEU" in self[0].header:
             return (

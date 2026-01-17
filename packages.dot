@@ -1,0 +1,57 @@
+digraph "packages" {
+rankdir=BT
+charset="utf-8"
+"src.pandorafits" [color="black", label=<src.pandorafits>, shape="box", style="solid"];
+"src.pandorafits.database" [color="black", label=<src.pandorafits.database>, shape="box", style="solid"];
+"src.pandorafits.database.astrometry" [color="black", label=<src.pandorafits.database.astrometry>, shape="box", style="solid"];
+"src.pandorafits.database.convenience" [color="black", label=<src.pandorafits.database.convenience>, shape="box", style="solid"];
+"src.pandorafits.database.level0" [color="black", label=<src.pandorafits.database.level0>, shape="box", style="solid"];
+"src.pandorafits.database.level1" [color="black", label=<src.pandorafits.database.level1>, shape="box", style="solid"];
+"src.pandorafits.database.level2" [color="black", label=<src.pandorafits.database.level2>, shape="box", style="solid"];
+"src.pandorafits.database.level3" [color="black", label=<src.pandorafits.database.level3>, shape="box", style="solid"];
+"src.pandorafits.database.mixins" [color="black", label=<src.pandorafits.database.mixins>, shape="box", style="solid"];
+"src.pandorafits.database.targets" [color="black", label=<src.pandorafits.database.targets>, shape="box", style="solid"];
+"src.pandorafits.fits" [color="black", label=<src.pandorafits.fits>, shape="box", style="solid"];
+"src.pandorafits.formats" [color="black", label=<src.pandorafits.formats>, shape="box", style="solid"];
+"src.pandorafits.io" [color="black", label=<src.pandorafits.io>, shape="box", style="solid"];
+"src.pandorafits.nirda" [color="black", label=<src.pandorafits.nirda>, shape="box", style="solid"];
+"src.pandorafits.processing" [color="black", label=<src.pandorafits.processing>, shape="box", style="solid"];
+"src.pandorafits.report" [color="black", label=<src.pandorafits.report>, shape="box", style="solid"];
+"src.pandorafits.reshape" [color="black", label=<src.pandorafits.reshape>, shape="box", style="solid"];
+"src.pandorafits.roll" [color="black", label=<src.pandorafits.roll>, shape="box", style="solid"];
+"src.pandorafits.scene" [color="black", label=<src.pandorafits.scene>, shape="box", style="solid"];
+"src.pandorafits.utils" [color="black", label=<src.pandorafits.utils>, shape="box", style="solid"];
+"src.pandorafits.visda" [color="black", label=<src.pandorafits.visda>, shape="box", style="solid"];
+"src.pandorafits" -> "src.pandorafits.io" [arrowhead="open", arrowtail="none"];
+"src.pandorafits" -> "src.pandorafits.nirda" [arrowhead="open", arrowtail="none"];
+"src.pandorafits" -> "src.pandorafits.visda" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database" -> "src.pandorafits.database.astrometry" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database" -> "src.pandorafits.database.convenience" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database" -> "src.pandorafits.database.level0" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database" -> "src.pandorafits.database.level1" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database" -> "src.pandorafits.database.level2" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database" -> "src.pandorafits.database.level3" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database" -> "src.pandorafits.database.targets" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database" -> "src.pandorafits.roll" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database.astrometry" -> "src.pandorafits.database.mixins" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database.level0" -> "src.pandorafits.database.astrometry" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database.level0" -> "src.pandorafits.database.mixins" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database.level0" -> "src.pandorafits.database.targets" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database.level1" -> "src.pandorafits.database.mixins" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database.level2" -> "src.pandorafits.database.level1" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database.level3" -> "src.pandorafits.database.level2" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.database.targets" -> "src.pandorafits.database.mixins" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.fits" -> "src.pandorafits.processing" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.fits" -> "src.pandorafits.utils" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.formats" -> "src.pandorafits.nirda" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.formats" -> "src.pandorafits.visda" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.nirda" -> "src.pandorafits.fits" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.nirda" -> "src.pandorafits.io" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.nirda" -> "src.pandorafits.scene" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.processing" -> "src.pandorafits.database" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.visda" -> "src.pandorafits.fits" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.visda" -> "src.pandorafits.io" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.visda" -> "src.pandorafits.report" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.visda" -> "src.pandorafits.reshape" [arrowhead="open", arrowtail="none"];
+"src.pandorafits.visda" -> "src.pandorafits.scene" [arrowhead="open", arrowtail="none"];
+}

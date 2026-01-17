@@ -1,11 +1,13 @@
 # flake8: noqa W291
 """Database tools for holding astrometry as measured on board."""
 
+# Standard library
 import os
 import warnings
 from datetime import timedelta
 from pathlib import Path
 
+# Third-party
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
@@ -59,7 +61,9 @@ class AstrometryDataBase(DataBaseMixins):
                 badchecksum = len(
                     [warn for warn in w if "Checksum" in str(warn.message)]
                 )
-                baddatasum = len([warn for warn in w if "Datasum" in str(warn.message)])
+                baddatasum = len(
+                    [warn for warn in w if "Datasum" in str(warn.message)]
+                )
 
                 hdr = hdulist[0].header
                 time = (
@@ -108,8 +112,10 @@ class AstrometryDataBase(DataBaseMixins):
                         hdr["CRSOFTV"],
                         __version__,
                         time.jd,
-                        time.jd + ((temp_data[-1][0] / 1e3) / (24.0 * 60.0 * 60.0)),
-                        time.jd + ((temp_data[idx][0] / 1e3) / (24.0 * 60.0 * 60.0)),
+                        time.jd
+                        + ((temp_data[-1][0] / 1e3) / (24.0 * 60.0 * 60.0)),
+                        time.jd
+                        + ((temp_data[idx][0] / 1e3) / (24.0 * 60.0 * 60.0)),
                         exptime,
                         hashkey,
                         hdr["TARG_ID"],

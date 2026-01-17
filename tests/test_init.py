@@ -1,5 +1,7 @@
+# Standard library
 import os
 
+# First-party/Local
 import pandorafits.database as pfdb  # noqa
 from pandorafits import PACKAGEDIR, logger
 from pandorafits.nirda import NIRDALevel0HDUList

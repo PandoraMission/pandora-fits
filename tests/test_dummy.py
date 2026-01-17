@@ -1,3 +1,4 @@
+# First-party/Local
 from pandorafits import PACKAGEDIR, logger
 from pandorafits.nirda import NIRDALevel0HDUList
 from pandorafits.visda import VISDAFFILevel0HDUList, VISDALevel0HDUList

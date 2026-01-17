@@ -1,7 +1,9 @@
 """Mixins for report generation"""
 
+# Future
 from __future__ import annotations
 
+# Third-party
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
@@ -80,11 +82,12 @@ class ReportMixins:
             # draw + pull RGBA buffer (no disk)
             src_fig.canvas.draw()
             w, h = src_fig.canvas.get_width_height()
+            # Third-party
             import numpy as np
 
-            rgba = np.frombuffer(src_fig.canvas.buffer_rgba(), dtype=np.uint8).reshape(
-                h, w, 4
-            )
+            rgba = np.frombuffer(
+                src_fig.canvas.buffer_rgba(), dtype=np.uint8
+            ).reshape(h, w, 4)
             target_ax.imshow(rgba)
 
         # Fill grid left-to-right, top-to-bottom
@@ -117,7 +120,9 @@ class ReportMixins:
                 continue
 
             # If it's something else, user should convert it to a plot method
-            raise TypeError(f"Unsupported report material type: {type(item)!r}")
+            raise TypeError(
+                f"Unsupported report material type: {type(item)!r}"
+            )
 
         return fig
 

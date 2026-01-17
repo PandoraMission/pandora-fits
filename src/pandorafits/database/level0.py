@@ -1,6 +1,7 @@
 # flake8: noqa W291
 """Database tools for MOC files database"""
 
+# Standard library
 import os
 import sqlite3
 import stat
@@ -8,6 +9,7 @@ import warnings
 from datetime import timedelta
 from pathlib import Path
 
+# Third-party
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
@@ -73,7 +75,9 @@ class Level0DataBase(DataBaseMixins):
                 badchecksum = len(
                     [warn for warn in w if "Checksum" in str(warn.message)]
                 )
-                baddatasum = len([warn for warn in w if "Datasum" in str(warn.message)])
+                baddatasum = len(
+                    [warn for warn in w if "Datasum" in str(warn.message)]
+                )
 
                 hdr = hdulist[0].header
                 time = (
@@ -276,7 +280,9 @@ class Level0DataBase(DataBaseMixins):
     def _update_target_from_SOC(self):
         # This makes sure the database exists
         TargetDataBase()
-        self.cur.execute(f"ATTACH DATABASE '{LEVEL0_DIR}/targets.db' AS targets")
+        self.cur.execute(
+            f"ATTACH DATABASE '{LEVEL0_DIR}/targets.db' AS targets"
+        )
 
         # If there are nans in the targ_ra, targ_dec, fill them in with the most recent values from the SOC before the data.
         sql = """UPDATE pointings
@@ -403,7 +409,9 @@ class Level0DataBase(DataBaseMixins):
                     df.loc[idx, "targ_rll"] = get_roll(
                         Time(df.loc[idx, "start"], format="jd"),
                         SkyCoord(
-                            df.loc[idx, "targ_ra"], df.loc[idx, "targ_dec"], unit="deg"
+                            df.loc[idx, "targ_ra"],
+                            df.loc[idx, "targ_dec"],
+                            unit="deg",
                         ),
                     )[0].value
                     df.loc[idx, "targ_rll_type"] = "DPC PREDICT"
@@ -449,7 +457,9 @@ class Level0DataBase(DataBaseMixins):
     def _update_pointing_from_payload(self):
         # This makes sure the database exists
         AstrometryDataBase()
-        self.cur.execute(f"ATTACH DATABASE '{LEVEL0_DIR}/astrometry.db' AS astrometry")
+        self.cur.execute(
+            f"ATTACH DATABASE '{LEVEL0_DIR}/astrometry.db' AS astrometry"
+        )
 
         # If there are nans in the targ_ra, targ_dec, fill them in with the most recent values from the SOC before the data.
         for attr in ["ra", "dec", "roll"]:
