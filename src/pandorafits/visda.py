@@ -56,7 +56,9 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         pri.header["NUMSTARS"] = 1
         hdulists = []
         for tdx in idxs:
-            im1 = fits.ImageHDU(self.data_list[:, tdx, :, :], self[1].header[10:])
+            im1 = fits.ImageHDU(
+                self.data_list[:, tdx, :, :], self[1].header[10:]
+            )
             tab1 = fits.TableHDU(self[2].data[[tdx]], self[2].header)
             hdulist = fits.HDUList([pri, im1, tab1, *self[3:]])
             hdulist = VISDALevel0HDUList(hdulist)
@@ -101,15 +103,21 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
 
     @property
     def data_cube(self):
-        return panels_to_cube(self[1].data, nROI=self.nROI, ROI_size=self.ROI_size)
+        return panels_to_cube(
+            self[1].data, nROI=self.nROI, ROI_size=self.ROI_size
+        )
 
     @property
     def data_list(self):
-        return panels_to_array(self[1].data, nROI=self.nROI, ROI_size=self.ROI_size)
+        return panels_to_array(
+            self[1].data, nROI=self.nROI, ROI_size=self.ROI_size
+        )
 
     @property
     def list_row(self):
-        row = np.asarray([r + np.arange(self.ROI_size[0]) for r, _ in self.ROI_corners])
+        row = np.asarray(
+            [r + np.arange(self.ROI_size[0]) for r, _ in self.ROI_corners]
+        )
         row = row[:, :, None] * np.ones((1, *self.ROI_size), dtype=int)
         return row
 
@@ -138,7 +146,10 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         return np.argmin(
             np.hypot(
                 *(
-                    (np.asarray(self.ROI_corners) + np.asarray(self.ROI_size)[0] / 2)
+                    (
+                        np.asarray(self.ROI_corners)
+                        + np.asarray(self.ROI_size)[0] / 2
+                    )
                     - 1024
                 ).T
             )
@@ -201,7 +212,9 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             ra, dec, rot = ra[:-1], dec[:-1], rot[:-1]
 
         et = (
-            convert_time(self[0].header["CORSTIME"], self[0].header["FINETIME"])
+            convert_time(
+                self[0].header["CORSTIME"], self[0].header["FINETIME"]
+            )
             + et * u.ms
         )
         return et, ra, dec, rot
@@ -246,9 +259,9 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             )
             df.append(
                 pd.DataFrame(
-                    np.asarray([avg_ra, avg_dec, avg_rot, err_ra, err_dec, err_rot])[
-                        None, :
-                    ],
+                    np.asarray(
+                        [avg_ra, avg_dec, avg_rot, err_ra, err_dec, err_rot]
+                    )[None, :],
                     columns=[
                         "avg_ra",
                         "avg_dec",
@@ -284,8 +297,12 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             df.loc[df["count"] < 5, "stability"] = np.nan
             df["recall"] = (
                 np.hypot(
-                    np.gradient(df.avg_ra.values - np.nanmedian(df.avg_ra.values), t),
-                    np.gradient(df.avg_dec.values - np.nanmedian(df.avg_dec.values), t),
+                    np.gradient(
+                        df.avg_ra.values - np.nanmedian(df.avg_ra.values), t
+                    ),
+                    np.gradient(
+                        df.avg_dec.values - np.nanmedian(df.avg_dec.values), t
+                    ),
                 )
                 * 3600
                 / 86400
