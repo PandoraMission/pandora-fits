@@ -10,6 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 
 # Third-party
+import fitsio
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
@@ -18,11 +19,99 @@ from astropy.time import Time
 
 from .. import DATA_DIR, LEVEL0_DIR, __version__, logger
 from ..roll import get_roll
-from ..utils import get_dpc_hashkey
+from ..utils import convert_time, get_dpc_hashkey
 from . import DPC_KEYS
 from .astrometry import AstrometryDataBase
 from .mixins import DataBaseMixins
 from .targets import TargetDataBase
+
+
+def get_entry(filename, checksums=False):
+    filesize = os.path.getsize(filename) / (1024 * 1024)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")  # capture all warnings
+
+        with fitsio.FITS(filename) as hdulist:
+            if len(hdulist) <= 1:
+                return
+
+            badchecksum, baddatasum = 0, 0
+            if checksums:
+                try:
+                    hdulist[1].verify_checksum()
+                except ValueError as e:
+                    if "data" in str(e):
+                        baddatasum += 1
+                    elif "hdu" in str(e):
+                        badchecksum += 1
+                    else:
+                        raise e
+
+            hdr = hdulist[0].read_header()
+            time = convert_time(hdr["CORSTIME"], hdr["FINETIME"])
+            hdr1 = hdulist[1].read_header()
+
+            if "FRMTIME" in hdr:
+                frame_time = hdr["FRMTIME"] / 1000
+            elif "EXPTIMEU" in hdr:
+                if "NAXIS3" in hdr1:
+                    frame_time = (
+                        hdr["EXPTIMEU"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
+                    ) / 1.0e6
+                else:
+                    frame_time = (hdr["EXPTIMEU"] * hdr["FRMSCLCT"]) / 1.0e6
+            elif "EXPTIME" in hdr:
+                if "NAXIS3" in hdr1:
+                    frame_time = (
+                        hdr["EXPTIME"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
+                    ) / 1.0e6
+                else:
+                    frame_time = (hdr["EXPTIME"] * hdr["FRMSCLCT"]) / 1.0e6
+
+            nframes = hdr1[f"NAXIS{hdr1['NAXIS']}"]
+            exptime = nframes * frame_time
+            for key in ["FINETIME", "CORSTIME", "INSTRMNT"]:
+                if key not in hdr:
+                    return
+            return (
+                filename.split("/")[-1],
+                filename.split("/")[-1],
+                "/".join(filename.split("/")[:-1]),
+                "/".join(filename.split("/")[:-1]),
+                hdr["CRSOFTV"],
+                __version__,
+                hdr["FINETIME"],
+                hdr["CORSTIME"],
+                time.jd,
+                time.isot,
+                exptime,
+                None,
+                None,
+                None,
+                hdr["INSTRMNT"],
+                hdr["ROISIZEX"],
+                hdr["ROISIZEY"],
+                hdr["ROISTRTX"],
+                hdr["ROISTRTY"],
+                len(hdulist),
+                "ASTROMETRY"
+                in np.asarray([hdu.get_extname() for hdu in hdulist]),
+                hdr["TARG_ID"] if "TARG_ID" in hdr else None,
+                hdr["TARG_RA"] if "TARG_RA" in hdr else None,
+                hdr["TARG_DEC"] if "TARG_DEC" in hdr else None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                hdr1["NAXIS1"] if "NAXIS1" in hdr1 else None,
+                hdr1["NAXIS2"] if "NAXIS2" in hdr1 else None,
+                hdr1["NAXIS3"] if "NAXIS3" in hdr1 else None,
+                hdr1["NAXIS4"] if "NAXIS4" in hdr1 else None,
+                badchecksum,
+                baddatasum,
+                filesize,
+            )
 
 
 class Level0DataBase(DataBaseMixins):
@@ -64,86 +153,86 @@ class Level0DataBase(DataBaseMixins):
     def __repr__(self):
         return f"Pandora Level{self.level}DataBase"
 
-    def get_entry(self, filename):
-        filesize = os.path.getsize(filename) / (1024 * 1024)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")  # capture all warnings
+    # def get_entry(self, filename):
+    #     filesize = os.path.getsize(filename) / (1024 * 1024)
+    #     with warnings.catch_warnings(record=True) as w:
+    #         warnings.simplefilter("always")  # capture all warnings
 
-            with fits.open(filename, lazy_load_hdus=True) as hdulist:
-                if len(hdulist) <= 1:
-                    return
-                badchecksum = len(
-                    [warn for warn in w if "Checksum" in str(warn.message)]
-                )
-                baddatasum = len(
-                    [warn for warn in w if "Datasum" in str(warn.message)]
-                )
+    #         with fits.open(filename, lazy_load_hdus=True) as hdulist:
+    #             if len(hdulist) <= 1:
+    #                 return
+    #             badchecksum = len(
+    #                 [warn for warn in w if "Checksum" in str(warn.message)]
+    #             )
+    #             baddatasum = len(
+    #                 [warn for warn in w if "Datasum" in str(warn.message)]
+    #             )
 
-                hdr = hdulist[0].header
-                time = (
-                    Time("2000-01-01 12:00:00", scale="tai")
-                    + timedelta(
-                        seconds=hdr["CORSTIME"],
-                        milliseconds=hdr["FINETIME"] / 1e6,
-                    )
-                ).utc
-                hdr1 = hdulist[1].header
+    #             hdr = hdulist[0].header
+    #             time = (
+    #                 Time("2000-01-01 12:00:00", scale="tai")
+    #                 + timedelta(
+    #                     seconds=hdr["CORSTIME"],
+    #                     milliseconds=hdr["FINETIME"] / 1e6,
+    #                 )
+    #             ).utc
+    #             hdr1 = hdulist[1].header
 
-                if "FRMTIME" in hdr:
-                    frame_time = hdr["FRMTIME"] / 1000
-                elif "EXPTIMEU" in hdr:
-                    frame_time = (
-                        hdr["EXPTIMEU"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
-                    ) / 1.0e6
-                elif "EXPTIME" in hdr:
-                    frame_time = (
-                        hdr["EXPTIME"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
-                    ) / 1.0e6
+    #             if "FRMTIME" in hdr:
+    #                 frame_time = hdr["FRMTIME"] / 1000
+    #             elif "EXPTIMEU" in hdr:
+    #                 frame_time = (
+    #                     hdr["EXPTIMEU"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
+    #                 ) / 1.0e6
+    #             elif "EXPTIME" in hdr:
+    #                 frame_time = (
+    #                     hdr["EXPTIME"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
+    #                 ) / 1.0e6
 
-                nframes = hdr1[f"NAXIS{hdr1['NAXIS']}"]
-                exptime = nframes * frame_time
-                for key in ["FINETIME", "CORSTIME", "INSTRMNT"]:
-                    if key not in hdr:
-                        return
-                return (
-                    filename.split("/")[-1],
-                    filename.split("/")[-1],
-                    "/".join(filename.split("/")[:-1]),
-                    "/".join(filename.split("/")[:-1]),
-                    hdr["CRSOFTV"],
-                    __version__,
-                    hdr["FINETIME"],
-                    hdr["CORSTIME"],
-                    time.jd,
-                    time.isot,
-                    exptime,
-                    None,
-                    None,
-                    None,
-                    hdr["INSTRMNT"],
-                    hdr["ROISIZEX"],
-                    hdr["ROISIZEY"],
-                    hdr["ROISTRTX"],
-                    hdr["ROISTRTY"],
-                    len(hdulist),
-                    "ASTROMETRY"
-                    in np.asarray([hdu.header["extname"] for hdu in hdulist]),
-                    hdr["TARG_ID"] if "TARG_ID" in hdr else None,
-                    hdr["TARG_RA"] if "TARG_RA" in hdr else None,
-                    hdr["TARG_DEC"] if "TARG_DEC" in hdr else None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    hdr1["NAXIS1"] if "NAXIS1" in hdr1 else None,
-                    hdr1["NAXIS2"] if "NAXIS2" in hdr1 else None,
-                    hdr1["NAXIS3"] if "NAXIS3" in hdr1 else None,
-                    hdr1["NAXIS4"] if "NAXIS4" in hdr1 else None,
-                    badchecksum,
-                    baddatasum,
-                    filesize,
-                )
+    #             nframes = hdr1[f"NAXIS{hdr1['NAXIS']}"]
+    #             exptime = nframes * frame_time
+    #             for key in ["FINETIME", "CORSTIME", "INSTRMNT"]:
+    #                 if key not in hdr:
+    #                     return
+    #             return (
+    #                 filename.split("/")[-1],
+    #                 filename.split("/")[-1],
+    #                 "/".join(filename.split("/")[:-1]),
+    #                 "/".join(filename.split("/")[:-1]),
+    #                 hdr["CRSOFTV"],
+    #                 __version__,
+    #                 hdr["FINETIME"],
+    #                 hdr["CORSTIME"],
+    #                 time.jd,
+    #                 time.isot,
+    #                 exptime,
+    #                 None,
+    #                 None,
+    #                 None,
+    #                 hdr["INSTRMNT"],
+    #                 hdr["ROISIZEX"],
+    #                 hdr["ROISIZEY"],
+    #                 hdr["ROISTRTX"],
+    #                 hdr["ROISTRTY"],
+    #                 len(hdulist),
+    #                 "ASTROMETRY"
+    #                 in np.asarray([hdu.header["extname"] for hdu in hdulist]),
+    #                 hdr["TARG_ID"] if "TARG_ID" in hdr else None,
+    #                 hdr["TARG_RA"] if "TARG_RA" in hdr else None,
+    #                 hdr["TARG_DEC"] if "TARG_DEC" in hdr else None,
+    #                 None,
+    #                 None,
+    #                 None,
+    #                 None,
+    #                 None,
+    #                 hdr1["NAXIS1"] if "NAXIS1" in hdr1 else None,
+    #                 hdr1["NAXIS2"] if "NAXIS2" in hdr1 else None,
+    #                 hdr1["NAXIS3"] if "NAXIS3" in hdr1 else None,
+    #                 hdr1["NAXIS4"] if "NAXIS4" in hdr1 else None,
+    #                 badchecksum,
+    #                 baddatasum,
+    #                 filesize,
+    #             )
 
     def crawl_and_add(self):
         root = DATA_DIR
@@ -157,7 +246,7 @@ class Level0DataBase(DataBaseMixins):
             ]
             rows = []
             for path in paths:
-                values = self.get_entry(path)
+                values = get_entry(path)
                 if values is not None:
                     rows.append(values)
             self.add_entries(rows)
@@ -529,8 +618,8 @@ class Level0DataBase(DataBaseMixins):
         self._update_dpc_seq_id()
         self._update_target()
         self._update_start()
-        self._update_target_from_SOC()
-        self._update_roll_from_SOC()
-        self._update_pointing_from_payload()
+        # self._update_target_from_SOC()
+        # self._update_roll_from_SOC()
+        # self._update_pointing_from_payload()
         self._update_dpc_hash_key()
         # self._update_roll()

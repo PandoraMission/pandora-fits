@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pandorafits"
-version = "0.4.5"
+version = "0.4.6"
 description = "Tools to work with fits files for Pandora"
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 license = "MIT"
@@ -13,8 +13,12 @@ lxml = "^5.3.0"
 astropy = ">=5"
 openpyxl = "^3.1.5"
 pandoraaperture = ">=0.1.14"
-pandoraref = ">=0.3.3"
+pandoraref = ">=2.1.0"
 sparse3d = ">=1.2.11"
+fitsio = "^1.3.0"
+astroquery = "^0.4.11"
+pandoraspacecraft = ">=1.1.5"
+lamatrix = "^1.0.1"
 
 [tool.poetry.group.dev]
 optional = true
@@ -34,6 +38,8 @@ mkdocs-include-markdown-plugin = "^7.1.4"
 mkdocstrings = {version = "^0.28.2", extras = ["python"]}
 jupyter-contrib-nbextensions = "^0.7.0"
 notebook = ">=6.0.0,<7.0.0"
+line-profiler = "^5.0.2"
+fbpca = "^1.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

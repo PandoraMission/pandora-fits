@@ -1,17 +1,23 @@
+# Standard library
+from datetime import timedelta
+
 # Third-party
+import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pandoraspacecraft as psc
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
 
-from . import FORMATSDIR, VISDAReference, logger
+from . import FORMATSDIR, VISDAReference, logger, ps
 from .fits import PandoraHDUList
 from .io import register_hdulist
 from .report import ReportMixins
 from .reshape import array_to_panels, panels_to_array, panels_to_cube
 from .scene import get_VISDA_scene, get_VISDAFFI_scene
+from .utils import convert_time
 
 __all__ = [
     "VISDAFFILevel0HDUList",
@@ -23,12 +29,14 @@ __all__ = [
 
 
 @register_hdulist(
-    lambda h: h
-    and (
-        (h[0].header.get("TELESCOP") == "NASA Pandora")
-        & (h[0].header.get("INSTRMNT") == "VISDA")
-        & ("FRMPCOAD" in h[0].header)
-        & ("PFCLASS" not in h[0].header)
+    lambda h: (
+        h
+        and (
+            (h[0].header.get("TELESCOP") == "NASA Pandora")
+            & (h[0].header.get("INSTRMNT") == "VISDA")
+            & ("FRMPCOAD" in h[0].header)
+            & ("PFCLASS" not in h[0].header)
+        )
     )
 )
 class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
@@ -36,6 +44,28 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
     reference = VISDAReference
     level = 0
     instrument = "VISDA"
+
+    def split(self, idxs=None):
+        if idxs is None:
+            idxs = np.arange(0, self.nROI)
+        ndim = np.ndim(idxs)
+        idxs = np.atleast_1d(idxs)
+        # if self[0].header["NUMSTARS"] == 1:
+        #     raise ValueError("Can not split, contains only one ROI.")
+        pri = self[0].copy()
+        pri.header["NUMSTARS"] = 1
+        hdulists = []
+        for tdx in idxs:
+            im1 = fits.ImageHDU(
+                self.data_list[:, tdx, :, :], self[1].header[10:]
+            )
+            tab1 = fits.TableHDU(self[2].data[[tdx]], self[2].header)
+            hdulist = fits.HDUList([pri, im1, tab1, *self[3:]])
+            hdulist = VISDALevel0HDUList(hdulist)
+            hdulists.append(hdulist)
+        if ndim == 0:
+            return hdulists[0]
+        return hdulists
 
     @property
     def border(self):
@@ -66,6 +96,10 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
     @property
     def nROI(self):
         return self[0].header["NUMSTARS"]
+
+    @property
+    def frmpcoad(self):
+        return self[0].header["FRMPCOAD"]
 
     @property
     def data_cube(self):
@@ -108,6 +142,20 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         return R
 
     @property
+    def _central_target_index(self):
+        return np.argmin(
+            np.hypot(
+                *(
+                    (
+                        np.asarray(self.ROI_corners)
+                        + np.asarray(self.ROI_size)[0] / 2
+                    )
+                    - 1024
+                ).T
+            )
+        )
+
+    @property
     def border_mask(self):
         ex = int(self.border)
         num_stars = self.nROI
@@ -148,6 +196,118 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         plt.colorbar(im, ax=ax)
         # ax.margins(0)
         return ax
+
+    @property
+    def astrometry(self):
+        ra, dec, rot = np.asarray(
+            [
+                self["astrometry"].data[c]
+                for c in ["RightAscension", "Declination", "Rotation"]
+            ]
+        )
+        et = self[3].data["ExposureStartTime_us"]
+        et = et[: len(ra)]
+        if et[-1] > 2**60:
+            et = et[:-1]
+            ra, dec, rot = ra[:-1], dec[:-1], rot[:-1]
+
+        et = (
+            convert_time(
+                self[0].header["CORSTIME"], self[0].header["FINETIME"]
+            )
+            + et * u.ms
+        )
+        return et, ra, dec, rot
+
+    def get_position_data(self):
+        et, ra, dec, rot = self.astrometry
+        dt = timedelta(seconds=self.frame_time.to(u.second).value)
+        t = self.start_time
+        df = []
+        count, missing = [], []
+        for frame in np.arange(self.nframes):
+            j = (et >= (t + (dt * frame))) & (et < (t + (dt * (frame + 1))))
+            k = np.isfinite(ra) & np.isfinite(dec) & np.isfinite(rot)
+            k &= (ra != 0) & (dec != 0) & (rot != 0)
+            count.append(len(k[j]))
+            missing.append((~k[j]).sum())
+            k &= j
+            if not k.any():
+                df.append(
+                    pd.DataFrame(
+                        np.asarray([np.nan] * 6)[None, :],
+                        columns=[
+                            "avg_ra",
+                            "avg_dec",
+                            "avg_rot",
+                            "err_ra",
+                            "err_dec",
+                            "err_rot",
+                        ],
+                    )
+                )
+                continue
+            avg_ra, avg_dec, avg_rot = (
+                np.mean(ra[k]),
+                np.mean(dec[k]),
+                np.mean(rot[k]),
+            )
+            err_ra, err_dec, err_rot = (
+                np.median(np.abs(ra[k] - avg_ra)),
+                np.median(np.abs(dec[k] - avg_dec)),
+                np.median(np.abs(rot[k] - avg_rot)),
+            )
+            df.append(
+                pd.DataFrame(
+                    np.asarray(
+                        [avg_ra, avg_dec, avg_rot, err_ra, err_dec, err_rot]
+                    )[None, :],
+                    columns=[
+                        "avg_ra",
+                        "avg_dec",
+                        "avg_rot",
+                        "err_ra",
+                        "err_dec",
+                        "err_rot",
+                    ],
+                )
+            )
+        df = pd.concat(df).reset_index(drop=True)
+        t = self.time.jd
+        df["t"] = t
+        df["sep"] = np.hypot(
+            df.avg_ra.values - self.targ.ra.value,
+            df.avg_dec.values - self.targ.dec.value,
+        )
+        df["count"] = count
+        df["missing"] = missing
+        if len(df) <= 3:
+            df["stability"] = np.nan
+            df["recall"] = np.nan
+            df["stable"] = False
+        else:
+            df["stability"] = (
+                np.hypot(
+                    # np.gradient(df.err_ra.values, t), np.gradient(df.err_dec.values, t)
+                    df.err_ra.values,
+                    df.err_dec.values,
+                )
+                * 3600
+            )
+            df.loc[df["count"] < 5, "stability"] = np.nan
+            df["recall"] = (
+                np.hypot(
+                    np.gradient(
+                        df.avg_ra.values - np.nanmedian(df.avg_ra.values), t
+                    ),
+                    np.gradient(
+                        df.avg_dec.values - np.nanmedian(df.avg_dec.values), t
+                    ),
+                )
+                * 3600
+                / 86400
+            )
+        return df
 
     def plot_astrometry(self, ax=None, **kwargs):
         if ax is None:
@@ -201,37 +361,31 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             lambda ax=None: self.plot_description(ax=ax),
         ]
 
+    def get_earth_angle(self):
+        return ps.get_angle_to_body(
+            self.time,
+            direction="z",
+            body="earth",
+            pointing_vecs=psc.utils.radec_to_vec(self.targ_ra, self.targ_dec),
+        )
+
     def __to_l1__(self):
         return VISDALevel1HDUList(self)
 
 
 @register_hdulist(
-    lambda h: h
-    and (
-        (h[0].header.get("TELESCOP") == "NASA Pandora")
-        & (h[0].header.get("INSTRMNT") == "VISDA")
-        & (h[0].header.get("PFCLASS") == "VISDALevel1HDUList")
+    lambda h: (
+        h
+        and (
+            (h[0].header.get("TELESCOP") == "NASA Pandora")
+            & (h[0].header.get("INSTRMNT") == "VISDA")
+            & (h[0].header.get("PFCLASS") == "VISDALevel1HDUList")
+        )
     )
 )
 class VISDALevel1HDUList(VISDALevel0HDUList):
     filename = FORMATSDIR + "visda/level1_visda.xlsx"
     level = 1
-
-    def split(self):
-        if self[0].header["NUMSTARS"] == 1:
-            raise ValueError("Can not split, contains only one ROI.")
-        pri = self[0].copy()
-        pri.header["NUMSTARS"] = 1
-        hdulists = []
-        for tdx in range(self.nROI):
-            im1 = fits.ImageHDU(
-                self.data_list[:, tdx, :, :], self[1].header[10:]
-            )
-            tab1 = fits.TableHDU(self[2].data[[tdx]], self[2].header)
-            hdulist = fits.HDUList([pri, im1, tab1, self[3], self[4]])
-            hdulist = VISDALevel1HDUList(hdulist)
-            hdulists.append(hdulist)
-        return hdulists
 
     def get_scene(self):
         hdr = self[0].header
@@ -322,11 +476,13 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
 
 
 @register_hdulist(
-    lambda h: h
-    and (
-        (h[0].header.get("TELESCOP") == "NASA Pandora")
-        & (h[0].header.get("INSTRMNT") == "VISDA")
-        & (h[0].header.get("PFCLASS") == "VISDALevel2HDUList")
+    lambda h: (
+        h
+        and (
+            (h[0].header.get("TELESCOP") == "NASA Pandora")
+            & (h[0].header.get("INSTRMNT") == "VISDA")
+            & (h[0].header.get("PFCLASS") == "VISDALevel2HDUList")
+        )
     )
 )
 class VISDALevel2HDUList(VISDALevel1HDUList):
@@ -335,12 +491,14 @@ class VISDALevel2HDUList(VISDALevel1HDUList):
 
 
 @register_hdulist(
-    lambda h: h
-    and (
-        (h[0].header.get("TELESCOP") == "NASA Pandora")
-        & (h[0].header.get("INSTRMNT") == "VISDA")
-        & ("FRMPCOAD" not in h[0].header)
-        & ("PFCLASS" not in h[0].header)
+    lambda h: (
+        h
+        and (
+            (h[0].header.get("TELESCOP") == "NASA Pandora")
+            & (h[0].header.get("INSTRMNT") == "VISDA")
+            & ("FRMPCOAD" not in h[0].header)
+            & ("PFCLASS" not in h[0].header)
+        )
     )
 )
 class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
@@ -392,11 +550,13 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
 
 
 @register_hdulist(
-    lambda h: h
-    and (
-        (h[0].header.get("TELESCOP") == "NASA Pandora")
-        & (h[0].header.get("INSTRMNT") == "VISDA")
-        & (h[0].header.get("PFCLASS") == "VISDAFFILevel1HDUList")
+    lambda h: (
+        h
+        and (
+            (h[0].header.get("TELESCOP") == "NASA Pandora")
+            & (h[0].header.get("INSTRMNT") == "VISDA")
+            & (h[0].header.get("PFCLASS") == "VISDAFFILevel1HDUList")
+        )
     )
 )
 class VISDAFFILevel1HDUList(VISDAFFILevel0HDUList):
@@ -436,11 +596,13 @@ class VISDAFFILevel1HDUList(VISDAFFILevel0HDUList):
 
 
 @register_hdulist(
-    lambda h: h
-    and (
-        (h[0].header.get("TELESCOP") == "NASA Pandora")
-        & (h[0].header.get("INSTRMNT") == "VISDA")
-        & (h[0].header.get("PFCLASS") == "VISDAFFILevel2HDUList")
+    lambda h: (
+        h
+        and (
+            (h[0].header.get("TELESCOP") == "NASA Pandora")
+            & (h[0].header.get("INSTRMNT") == "VISDA")
+            & (h[0].header.get("PFCLASS") == "VISDAFFILevel2HDUList")
+        )
     )
 )
 class VISDAFFILevel2HDUList(VISDAFFILevel1HDUList):

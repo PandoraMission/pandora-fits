@@ -17,6 +17,7 @@ from . import logger
 from .processing import ProcessingMixins
 from .utils import (
     BITPIX_DICT,
+    convert_time,
     generate_random_bintable_values,
     generate_random_table_values,
     get_excel_sheet,
@@ -376,6 +377,24 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         return self.__class__(super().copy())
 
     @property
+    def targ_id(self):
+        return self[0].header["TARG_ID"]
+
+    @property
+    def targ_ra(self):
+        if "TARG_RA" in self[0].header:
+            return self[0].header["TARG_RA"]
+        else:
+            return None
+
+    @property
+    def targ_dec(self):
+        if "TARG_DEC" in self[0].header:
+            return self[0].header["TARG_DEC"]
+        else:
+            return None
+
+    @property
     def targ(self):
         if "TARG_RA" in self[0].header:
             return SkyCoord(
@@ -400,14 +419,17 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
     @property
     def start_time(self):
         """Given Pandora HDUList obtains the detector time in TAI."""
-        time = (
-            Time("2000-01-01 12:00:00", scale="tai")
-            + timedelta(
-                seconds=self[0].header["CORSTIME"],
-                milliseconds=self[0].header["FINETIME"] / 1e6,
-            )
-        ).utc
-        return time
+        return convert_time(
+            self[0].header["CORSTIME"], self[0].header["FINETIME"]
+        )
+        # time = (
+        #     Time("2000-01-01 00:00:00", scale="tai")
+        #     + timedelta(
+        #         seconds=self[0].header["CORSTIME"],
+        #         milliseconds=self[0].header["FINETIME"] / 1e6,
+        #     )
+        # ).utc
+        # return time
 
     @property
     def sequence_start_time(self):
@@ -481,6 +503,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
     def end_time(self):
         return self.start_time + self.nframes * self.frame_time
 
+    @property
     def time(self):
         dt = timedelta(seconds=self.frame_time.to(u.second).value)
-        return (self.start_time + (np.arange(self.nframes) * dt)).jd
+        return self.start_time + (np.arange(self.nframes) * dt)

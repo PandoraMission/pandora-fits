@@ -15,6 +15,8 @@ from appdirs import user_config_dir, user_data_dir  # noqa: E402
 from rich.console import Console  # noqa: E402
 from rich.logging import RichHandler  # noqa: E402
 from glob import glob  # noqa: E402
+from pandoraspacecraft import PandoraSpacecraft
+import builtins
 
 PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
 FORMATSDIR = f"{PACKAGEDIR}/formats/"
@@ -82,16 +84,16 @@ def reset_config():
     config = configparser.ConfigParser()
     config["SETTINGS"] = {
         "log_level": "INFO",
-        "data_dir": "/Users/chedges/Desktop/newlancedata/",
+        "data_dir": "/Users/chedges/Desktop/PandoraFirstLight/data2/",
         "calendar_dir": "/Users/chedges/Desktop/",
         "log_dir": user_data_dir("pandorafits") + "/logs",
         "level0_dir": user_data_dir("pandorafits"),
         "level1_dir": user_data_dir("pandorafits") + "/level1",
         "level2_dir": user_data_dir("pandorafits") + "/level2",
         "level3_dir": user_data_dir("pandorafits") + "/level3",
-        "crsoftver": "v3.01",
+        "crsoftver": "v3.03",
     }
-    with open(CONFIGPATH, "w") as configfile:
+    with builtins.open(CONFIGPATH, "w") as configfile:
         config.write(configfile)
 
 
@@ -125,7 +127,7 @@ def save_config(config: configparser.ConfigParser) -> None:
     app_name : str
         Name of the application.
     """
-    with open(CONFIGPATH, "w") as configfile:
+    with builtins.open(CONFIGPATH, "w") as configfile:
         config.write(configfile)
 
 
@@ -200,6 +202,8 @@ def display_config() -> pd.DataFrame:
 
 NIRDAReference = pr.NIRDAReference()
 VISDAReference = pr.VISDAReference()
+
+ps = PandoraSpacecraft()
 
 from .io import *  # noqa
 from .nirda import *  # noqa

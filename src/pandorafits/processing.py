@@ -2,15 +2,18 @@
 
 # Standard library
 from copy import deepcopy
+from functools import cached_property
 
 # Third-party
 import astropy.units as u
+import gaiaoffline
 import numpy as np
+from astropy.coordinates import Distance, SkyCoord
 from astropy.io import fits
 from astropy.table import Table
 from astropy.time import Time
 
-from . import NIRDAReference, __version__, logger
+from . import NIRDAReference, __version__, logger, ps
 from .database import AstrometryDataBase, Level0DataBase
 
 
@@ -35,6 +38,8 @@ class ProcessingMixins:
         return value
 
     def _apply_detector_image(self, name, func):
+        if "COMMENT" not in self[0].header:
+            self[0].header["COMMENT"] = ""
         if f"Subtracted {name}." in self[0].header["COMMENT"]:
             logger.warning(
                 f"Attempted {name} application a second time. Ignoring {name} subtraction."
@@ -50,6 +55,12 @@ class ProcessingMixins:
             self[1].data.astype(float), header=self[1].header
         )
         self[0].header["COMMENT"] = "Cast data to float."
+
+    def _subtract_stripes(self):
+        logger.info("Subtracting stripes")
+        self._apply_detector_image(
+            "stripes", lambda x, y: x - (y * self.frmpcoad)
+        )
 
     def _subtract_bias(self):
         logger.info("Subtracting bias")
@@ -87,20 +98,34 @@ class ProcessingMixins:
         quality = self._get_reference_detector_image("bad_pixel")
         self.append(fits.CompImageHDU(quality, name="QUALITY"))
 
+    # def _append_wcs(self):
+    #     logger.info("Applying WCS")
+    #     hdr = self[0].header
+    #     wcs = self.reference.get_wcs(
+    #         hdr["targ_ra"] if hdr["targ_ra"] is not None else 0,
+    #         hdr["targ_dec"] if hdr["targ_dec"] is not None else 0,
+    #         hdr["targ_rll"] if hdr["targ_rll"] is not None else 40,
+    #         distortion=True,
+    #         yreflect=True,
+    #     )
+    #     wcs_hdr = wcs.to_header(relax=True)
+
+    #     self[1].header.extend(wcs_hdr)
+    #     self[0].header["COMMENT"] = "Appended WCS."
+
     def _append_wcs(self):
-        logger.info("Applying WCS")
-        hdr = self[0].header
-        wcs = self.reference.get_wcs(
-            hdr["targ_ra"] if hdr["targ_ra"] is not None else 0,
-            hdr["targ_dec"] if hdr["targ_dec"] is not None else 0,
-            hdr["targ_rll"] if hdr["targ_rll"] is not None else 40,
-            distortion=True,
-            yreflect=True,
+        k = self.get_earth_angle() > self.visda_keepout
+        df = self.get_position_data()
+        wcs = self.reference.get_wcs_from_VITL(
+            np.median(df.avg_ra.values[k]),
+            np.median(df.avg_dec.values[k]),
+            np.median(df.avg_rot.values[k]),
         )
         wcs_hdr = wcs.to_header(relax=True)
-
         self[1].header.extend(wcs_hdr)
         self[0].header["COMMENT"] = "Appended WCS."
+        if "TEMP_TIME" in self:
+            Table(self["TEMP_TIME"].data)
 
     def _append_error_extension(self):
         """Procedure to make error extension, specific to VISDALevel1HDUList."""
@@ -230,6 +255,61 @@ class ProcessingMixins:
         else:
             return
 
+    @cached_property
+    def catalog_params(self):
+        with gaiaoffline.Gaia(
+            tmass_crossmatch=True, photometry_output="magnitude"
+        ) as gaia:
+            df = gaia.conesearch(self.targ_ra, self.targ_dec, 0.1).reset_index(
+                drop=True
+            )
+
+        coords = SkyCoord(
+            ra=df["ra"].values * u.deg,
+            dec=df["dec"].values * u.deg,
+            pm_ra_cosdec=df["pmra"].fillna(0).values * u.mas / u.year,
+            pm_dec=df["pmdec"].fillna(0).values * u.mas / u.year,
+            obstime=Time.strptime("2016", "%Y"),
+            distance=Distance(
+                parallax=df["parallax"].fillna(0).values * u.mas,
+                allow_negative=True,
+            ),
+            radial_velocity=df["radial_velocity"].fillna(0).values
+            * u.km
+            / u.s,
+        ).apply_space_motion(self.start_time)
+        df = df.iloc[coords.separation(self.coord).argmin()]
+        return df.to_dict()
+
+    def _update_catalog_params(self):
+        logger.info("Adding catalog header kwargs")
+        cat = self.catalog_params
+        self[0].header.extend(
+            [
+                (
+                    "GAIADR3",
+                    f"Gaia DR3 {cat['source_id']}",
+                    "Gaia DR3 source ID",
+                ),
+                ("GAIARA", cat["ra"], "Gaia DR3 RA in J2016"),
+                ("GAIADEC", cat["dec"], "Gaia DR3 DEC in J2016"),
+                ("parallax", cat["parallax"], "Gaia DR3 parallax"),
+                ("pmra", cat["pmra"], "Gaia DR3 pmra"),
+                ("pmdec", cat["pmdec"], "Gaia DR3 pmdec"),
+                (
+                    "2MASSID",
+                    f"2MASS J{cat['tmass_source_id']}",
+                    "2MASS source ID",
+                ),
+                ("j_m", cat["j_m"], "2MASS j magnitude"),
+                ("h_m", cat["h_m"], "2MASS h magnitude"),
+                ("k_m", cat["k_m"], "2MASS k magnitude"),
+                ("g_m", cat["phot_g_mean_mag"], "Gaia DR3 g magnitude"),
+                ("bp_m", cat["phot_bp_mean_mag"], "Gaia DR3 bp magnitude"),
+                ("rp_m", cat["phot_rp_mean_mag"], "Gaia DR3 rp magnitude"),
+            ]
+        )
+
     def to_level1(self, upcast=True, **kwargs):
         if self.level >= 1:
             raise ValueError("This is a Level 1 Product.")
@@ -307,3 +387,27 @@ class ProcessingMixins:
         if upcast:
             new = new.__to_l2__()
         return new
+
+    @cached_property
+    def earth_illumination(self):
+        return ps.get_earth_illumination(self.time)
+
+    @cached_property
+    def visda_keepout(self):
+        earth_illum = self.earth_illumination
+        keepout = np.ones(len(earth_illum)) * 75
+        keepout[earth_illum.value < 90] = (
+            2.5 * (90 - earth_illum[earth_illum.value < 90].value) + 105
+        )
+        keepout[keepout > 135] = 135
+        return keepout * u.deg
+
+    @cached_property
+    def nirda_keepout(self):
+        earth_illum = self.earth_illumination
+        keepout = np.ones(len(earth_illum)) * 75
+        keepout[earth_illum.value < 90] = (
+            2.5 * (90 - earth_illum[earth_illum.value < 90].value) + 80.5
+        )
+        keepout[keepout > 135] = 135
+        return keepout * u.deg

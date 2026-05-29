@@ -1,4 +1,5 @@
 # Third-party
+import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.coordinates import SkyCoord
@@ -7,6 +8,7 @@ from . import FORMATSDIR, NIRDAReference, logger
 from .fits import PandoraHDUList
 from .io import register_hdulist
 from .scene import get_NIRDA_scene
+from .utils import convert_time
 
 __all__ = [
     "NIRDALevel0HDUList",
@@ -15,12 +17,76 @@ __all__ = [
 ]
 
 
+def get_nirda_frame_indexes_tot(hdr):
+    totframes = 0
+    times = []
+    for e in range(hdr["EXPOSRES"]):
+        for i in range(hdr["INTEGRTS"]):
+            if i == 0:
+                totframes += hdr["RESETS1"]
+            else:
+                totframes += hdr["RESETS2"]
+            totframes += hdr["DROPS1"]
+            for g in range(hdr["GRPS"]):
+                if g != 0:
+                    totframes += hdr["DROPS2"]
+                times.extend(totframes + np.arange(hdr["READS"]))
+                totframes += hdr["READS"]
+                if g == hdr["GRPS"] - 1:
+                    totframes += hdr["DROPS3"]
+    return np.asarray(times)
+
+
+def get_nirda_frame_times(hdr):
+    indexes = get_nirda_frame_indexes_tot(hdr)
+    return convert_time(hdr["CORSTIME"], hdr["FINETIME"]) + (
+        indexes * hdr["FRMTIME"] * u.millisecond
+    )
+
+
+def get_nirda_read_frame_indexes(hdr):
+    totframes = 0
+    times = []
+    for e in range(hdr["EXPOSRES"]):
+        for i in range(hdr["INTEGRTS"]):
+            for g in range(hdr["GRPS"]):
+                times.extend(totframes + np.arange(hdr["READS"]))
+                totframes += hdr["READS"]
+    return np.asarray(times)
+
+
+def get_nirda_acqd_ints(hdr0):
+    if hdr0["FRMSACQ"] != hdr0["FRMSEXP"]:
+        idxs = get_nirda_read_frame_indexes(hdr0)
+        idxs = idxs.reshape((hdr0["INTEGRTS"], hdr0["GRPS"], hdr0["READS"]))
+        acqd_reads = idxs < (hdr0["FRMSACQ"] - 1)
+        acqd_ints = np.where(acqd_reads.all(axis=(1, 2)))[0][-1]
+    else:
+        acqd_ints = hdr0["INTEGRTS"]
+    return acqd_ints
+
+
+def get_nirda_exposure_times(hdr):
+    times = []
+    for e in range(hdr["EXPOSRES"]):
+        for i in range(hdr["INTEGRTS"]):
+            totframes = 0
+            for g in range(hdr["GRPS"]):
+                if g != 0:
+                    totframes += hdr["DROPS2"]
+                times.extend(totframes + np.arange(1, hdr["READS"] + 1))
+                totframes += hdr["READS"]
+    return np.asarray(times)
+
+
 @register_hdulist(
-    lambda h: h
-    and (
-        (h[0].header.get("TELESCOP") == "NASA Pandora")
-        & (h[0].header.get("INSTRMNT") == "NIRDA")
-        & ("PFCLASS" not in h[0].header)
+    lambda h: (
+        h
+        and (
+            (h[0].header.get("TELESCOP") == "NASA Pandora")
+            & (h[0].header.get("INSTRMNT") == "NIRDA")
+            & ("PFCLASS" not in h[0].header)
+        )
     )
 )
 class NIRDALevel0HDUList(PandoraHDUList):
@@ -54,11 +120,13 @@ class NIRDALevel0HDUList(PandoraHDUList):
 
 
 @register_hdulist(
-    lambda h: h
-    and (
-        (h[0].header.get("TELESCOP") == "NASA Pandora")
-        & (h[0].header.get("INSTRMNT") == "NIRDA")
-        & (h[0].header.get("PFCLASS") == "NIRDALevel1HDUList")
+    lambda h: (
+        h
+        and (
+            (h[0].header.get("TELESCOP") == "NASA Pandora")
+            & (h[0].header.get("INSTRMNT") == "NIRDA")
+            & (h[0].header.get("PFCLASS") == "NIRDALevel1HDUList")
+        )
     )
 )
 class NIRDALevel1HDUList(NIRDALevel0HDUList):
@@ -107,11 +175,13 @@ class NIRDALevel1HDUList(NIRDALevel0HDUList):
 
 
 @register_hdulist(
-    lambda h: h
-    and (
-        (h[0].header.get("TELESCOP") == "NASA Pandora")
-        & (h[0].header.get("INSTRMNT") == "NIRDA")
-        & (h[0].header.get("PFCLASS") == "NIRDALevel2HDUList")
+    lambda h: (
+        h
+        and (
+            (h[0].header.get("TELESCOP") == "NASA Pandora")
+            & (h[0].header.get("INSTRMNT") == "NIRDA")
+            & (h[0].header.get("PFCLASS") == "NIRDALevel2HDUList")
+        )
     )
 )
 class NIRDALevel2HDUList(NIRDALevel1HDUList):

@@ -2,12 +2,14 @@
 import hashlib
 import random
 import string
+from datetime import timedelta
 from typing import List, Union
 
 # Third-party
 import numpy as np
 import openpyxl
 import pandas as pd
+from astropy.time import Time
 
 BITPIX_DICT = {
     8: (">u1", "Unsigned 8-bit integer, big-endian"),
@@ -26,6 +28,19 @@ BITPIX_DICT = {
 #     else:
 #         count = 0
 #     return targ_id, count
+
+T0 = Time("2000-01-01 00:00:00", scale="tai")
+
+
+def convert_time(corstime, finetime):
+    time = (
+        T0
+        + timedelta(
+            seconds=corstime,
+            milliseconds=finetime / 1e6,
+        )
+    ).utc
+    return time
 
 
 def get_dpc_hashkey(targ_id, ra, dec):
