@@ -255,21 +255,23 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         ax=None,
         roi_xdelta_left=5,
         roi_xdelta_right=5,
-        nperseg=16,
+        nperseg=None,
         **kwargs,
     ):
         """Plot a short-time PSD spectrogram of the background region.
 
         Splits the background pixel time series into overlapping windows of
-        ``nperseg`` frames (50 % overlap) and computes the PSD for each.
+        ``nperseg`` integrations (50 % overlap) and computes the PSD for each.
         Averaging across background pixels at each window reduces pixel-level
         scatter so the time evolution of the noise floor is visible.
 
         Parameters
         ----------
-        nperseg : int
-            Frames per FFT window.  Smaller values give finer time resolution
-            at the cost of coarser frequency resolution.  Default 32.
+        nperseg : int or None
+            Integrations per FFT window.  If None (default) the value is chosen
+            automatically as the largest power-of-2 that leaves at least 4
+            non-overlapping windows — balancing frequency and time resolution
+            given the available number of integrations.
         """
         from scipy.signal import spectrogram as scipy_spectrogram
 
@@ -289,6 +291,10 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         fpi = self._frames_per_integration
         dt = (fpi * self.frame_time).to(u.second).value
         fs = 1.0 / dt
+
+        if nperseg is None:
+            # Largest power-of-2 that leaves at least 4 non-overlapping windows.
+            nperseg = max(4, 2 ** int(np.log2(max(n_int // 4, 4))))
 
         # Compute spectrogram for each background pixel then average power
         freq, t_seg, sxx = scipy_spectrogram(
@@ -360,8 +366,23 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             rows.append([key, value, comment])
         _, hot = self.hot_pixels
         _, dead = self.dead_pixels
-        rows.append(["HOT_MED", int(np.median(hot)), "Median hot pixels per frame"])
-        rows.append(["DEAD_MED", int(np.median(dead)), "Median dead pixels per frame"])
+        rows.append(["HOT_MED", int(np.median(hot)), "Median hot pixels per integration"])
+        rows.append(["DEAD_MED", int(np.median(dead)), "Median dead pixels per integration"])
+
+        _, rms = self.background_rms()
+        rows.append(["BG_RMS", round(float(np.median(rms)), 1), "Median background RMS [counts]"])
+
+        freq, psd = self.noise_psd()
+        # Fit PSD ~ f^(-alpha) in log-log space over the lowest third of frequencies,
+        # where 1/f noise dominates.  The negative slope gives the power-law index.
+        low = freq < np.percentile(freq, 33)
+        if low.sum() >= 2:
+            slope, _ = np.polyfit(np.log10(freq[low]), np.log10(psd[low]), 1)
+            alpha = round(float(-slope), 2)
+        else:
+            alpha = "N/A"
+        rows.append(["PSD_ALPHA", alpha, "1/f noise power-law index (PSD ~ f^-alpha)"])
+
         return pd.DataFrame(
             rows, columns=["Key", "Value", "Comment"]
         ).set_index("Key")
@@ -384,10 +405,10 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         
         use_log = kwargs.pop("log", True)
         if use_log:
-            d = np.median(np.log(self["science"].data), axis=0)
+            d = np.median(np.log(self.integrations), axis=0)
             max_add = 0.3
         else:
-            d = np.median(self["science"].data, axis=0)
+            d = np.median(self.integrations, axis=0)
             max_add = 100.0
         k = d != 0
         vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1.0))
