@@ -81,6 +81,33 @@ def get_nirda_exposure_times(hdr):
     return np.asarray(times)
 
 
+def get_integration_times(hdr):
+    """Compute the wall-clock duration of the first and subsequent integrations.
+
+    The first integration begins with RESETS1 reset frames; all subsequent
+    integrations begin with RESETS2.  The shared base includes drop frames and
+    GRPS * READS read frames.  Each detector frame takes pixel_read_time per
+    pixel, where pixel count includes the reference pixel border.
+
+    Returns
+    -------
+    int_1_time : float  Duration of the first integration [s].
+    int_n_time : float  Duration of subsequent integrations [s].
+    """
+    base_frames = (
+        hdr["DROPS1"]
+        + (hdr["GRPS"] - 1) * hdr["DROPS2"]
+        + hdr["DROPS3"]
+        + hdr["GRPS"] * hdr["READS"]
+    )
+    int_1_frames = hdr["RESETS1"] + base_frames
+    int_n_frames = hdr["RESETS2"] + base_frames
+    pixels = (hdr["ROISIZEX"] + 12) * (hdr["ROISIZEY"] + 2)
+    pixel_read_time = 0.00001  # sec / pixel
+    frame_time = pixel_read_time * pixels
+    return int_1_frames * frame_time, int_n_frames * frame_time
+
+
 def get_nirda_frames_per_integration(hdr):
     """Number of saved frames per integration reset cycle.
 
@@ -168,6 +195,46 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         ints = self.integrations  # (n_int, roi_y, roi_x)
         counts = (ints == 0).sum(axis=(1, 2))
         return self.integration_times, counts
+
+    @property
+    def ramp_linearity(self):
+        """Measure deviation from a linear ramp within each integration.
+
+        For a well-behaved detector the signal accumulates linearly with group
+        number.  A straight line is fitted to the group values per pixel via
+        vectorised OLS, and the RMS of the residuals is computed.  The median
+        across all pixels gives one scalar per integration.
+
+        Elevated values indicate saturation, persistence, or reset anomalies.
+
+        Returns
+        -------
+        integration_times : astropy Time array of length INTEGRTS.
+        rms_per_int       : ndarray (INTEGRTS,) — median pixel ramp residual RMS.
+        """
+        science = self["science"].data.astype(float)  # (nframes, roi_y, roi_x)
+        fpi = self._frames_per_integration
+        n_int = self[0].header["INTEGRTS"]
+
+        # Reshape to (n_int, fpi, roi_y, roi_x) so axis-1 is the within-ramp axis
+        ramp = science.reshape(n_int, fpi, science.shape[1], science.shape[2])
+
+        # Vectorised OLS: fit y = a + b*g for g in [0, fpi)
+        g = np.arange(fpi, dtype=float)
+        g_dev = g - g.mean()
+        g_ss = (g_dev ** 2).sum()
+
+        r_mean = ramp.mean(axis=1, keepdims=True)                              # (n_int, 1, h, w)
+        slope = (g_dev[None, :, None, None] * (ramp - r_mean)).sum(axis=1) / g_ss  # (n_int, h, w)
+        intercept = r_mean[:, 0] - slope * g.mean()                           # (n_int, h, w)
+
+        fitted = intercept[:, None] + slope[:, None] * g[None, :, None, None] # (n_int, fpi, h, w)
+        residuals = ramp - fitted
+
+        pixel_rms = np.sqrt((residuals ** 2).mean(axis=1))                    # (n_int, h, w)
+        rms_per_int = np.median(pixel_rms.reshape(n_int, -1), axis=1)
+
+        return self.integration_times, rms_per_int
 
     def noise_psd(self, roi_xdelta_right=5, roi_xdelta_left=5):
         """Return the averaged one-sided PSD of background pixel time series.
@@ -319,6 +386,21 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         return ax
 
+    def plot_ramp_linearity(self, ax=None, **kwargs):
+        called_from_report = ax is not None
+        if ax is None:
+            _, ax = plt.subplots()
+        t, rms = self.ramp_linearity
+        t_min = (t.jd - self.start_time.jd) * 24 * 60
+        ax.plot(t_min, rms, **kwargs)
+        med = float(np.median(rms))
+        ax.axhline(med, ls="--", color="gray", lw=1, label=f"median {med:.1f}")
+        ax.legend(fontsize=8)
+        ax.set(xlabel="Time from Start [min]", ylabel="Ramp Residual RMS [counts]")
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
+        return ax
+
     def plot_bad_pixels(self, ax=None, **kwargs):
         called_from_report = ax is not None
         if ax is None:
@@ -343,12 +425,17 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             "TARG_ID",
             "TARG_RA",
             "TARG_DEC",
-            "INTEGRTS",
-            "GRPS",
-            "READS",
             "EXPOSRES",
+            "RESETS1",
+            "RESETS2",
+            "DROPS1",
+            "DROPS2",
+            "DROPS3",
+            "READS",
+            "GRPS",
+            "INTEGRTS",
             "ROISIZEX",
-            "ROISIZEY",
+            "ROISIZEY"
         ]
         hdr = self[0].header
         rows = []
@@ -364,17 +451,25 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
                 except (TypeError, ValueError):
                     pass
             rows.append([key, value, comment])
+        
+        # Add integration time info
+        int_1_time, int_n_time = get_integration_times(hdr)
+        rows.append(["INT_1_TIME", round(int_1_time, 4), "First integration time [s]"])
+        rows.append(["INT_N_TIME", round(int_n_time, 4), "Subsequent integration time [s]"])
+
+        # Add hot/dead pixel info
         _, hot = self.hot_pixels
         _, dead = self.dead_pixels
         rows.append(["HOT_MED", int(np.median(hot)), "Median hot pixels per integration"])
         rows.append(["DEAD_MED", int(np.median(dead)), "Median dead pixels per integration"])
 
+        # Background RMS
         _, rms = self.background_rms()
         rows.append(["BG_RMS", round(float(np.median(rms)), 1), "Median background RMS [counts]"])
 
-        freq, psd = self.noise_psd()
         # Fit PSD ~ f^(-alpha) in log-log space over the lowest third of frequencies,
         # where 1/f noise dominates.  The negative slope gives the power-law index.
+        freq, psd = self.noise_psd()
         low = freq < np.percentile(freq, 33)
         if low.sum() >= 2:
             slope, _ = np.polyfit(np.log10(freq[low]), np.log10(psd[low]), 1)
@@ -382,6 +477,10 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         else:
             alpha = "N/A"
         rows.append(["PSD_ALPHA", alpha, "1/f noise power-law index (PSD ~ f^-alpha)"])
+
+        # NIRDA ramp linearity
+        _, ramp_rms = self.ramp_linearity
+        rows.append(["RAMP_MED", round(float(np.median(ramp_rms)), 1), "Median ramp residual RMS [counts]"])
 
         return pd.DataFrame(
             rows, columns=["Key", "Value", "Comment"]
@@ -396,6 +495,7 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             "astrometry": lambda ax=None: self.plot_noise_psd(ax=ax),
             "bad_pixels": lambda ax=None: self.plot_bad_pixels(ax=ax),
             "background_rms": lambda ax=None: self.plot_background_rms(ax=ax),
+            "ramp_linearity": lambda ax=None: self.plot_ramp_linearity(ax=ax),
         }
 
     def plot_data(self, ax=None, **kwargs):

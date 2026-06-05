@@ -53,14 +53,15 @@ class ReportMixins:
         remainder           blank
         """
         fig = plt.figure(figsize=(12, 10), dpi=dpi, constrained_layout=True)
-        gs = fig.add_gridspec(5, 6, wspace=wspace, hspace=hspace)
+        gs = fig.add_gridspec(6, 6, wspace=wspace, hspace=hspace)
 
-        ax_t1    = fig.add_subplot(gs[0:1, 0:3])
-        ax_t2    = fig.add_subplot(gs[0:1, 3:6])
-        ax_star  = fig.add_subplot(gs[1:3,   0:2])
-        ax_astro = fig.add_subplot(gs[1:3,   2:4])
-        ax_bad   = fig.add_subplot(gs[1:3,   4:6])
-        ax_bgrms = fig.add_subplot(gs[3:5,   4:6])
+        ax_t1    = fig.add_subplot(gs[0:2, 0:3])
+        ax_t2    = fig.add_subplot(gs[0:2, 3:6])
+        ax_star  = fig.add_subplot(gs[2:4, 0:2])
+        ax_astro = fig.add_subplot(gs[2:4, 2:4])
+        ax_bad   = fig.add_subplot(gs[2:4, 4:6])
+        ax_ramp  = fig.add_subplot(gs[4:6, 0:4])
+        ax_bgrms = fig.add_subplot(gs[4:6, 4:6])
 
         materials = self.get_report_materials()
 
@@ -89,7 +90,7 @@ class ReportMixins:
             ax_t1.axis("off")
             ax_t2.axis("off")
 
-        for key, ax in [("star_field", ax_star), ("astrometry", ax_astro), ("bad_pixels", ax_bad), ("background_rms", ax_bgrms)]:
+        for key, ax in [("star_field", ax_star), ("astrometry", ax_astro), ("bad_pixels", ax_bad), ("ramp_linearity", ax_ramp), ("background_rms", ax_bgrms)]:
             fn = materials.get(key)
             if callable(fn):
                 fn(ax=ax)
