@@ -2,11 +2,13 @@
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from astropy.coordinates import SkyCoord
 
 from . import FORMATSDIR, NIRDAReference, logger
 from .fits import PandoraHDUList
 from .io import register_hdulist
+from .report import ReportMixins
 from .scene import get_NIRDA_scene
 from .utils import convert_time
 
@@ -89,7 +91,7 @@ def get_nirda_exposure_times(hdr):
         )
     )
 )
-class NIRDALevel0HDUList(PandoraHDUList):
+class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
     filename = FORMATSDIR + "nirda/level0_nirda.xlsx"
     reference = NIRDAReference
     level = 0
@@ -98,7 +100,47 @@ class NIRDALevel0HDUList(PandoraHDUList):
     def __to_l1__(self):
         return NIRDALevel1HDUList(self)
 
+    def describe(self):
+        keys = [
+            "TARG_ID",
+            "TARG_RA",
+            "TARG_DEC",
+            "INTEGRTS",
+            "GRPS",
+            "READS",
+            "EXPOSRES",
+            "ROISIZEX",
+            "ROISIZEY",
+        ]
+        hdr = self[0].header
+        rows = []
+        for key in keys:
+            try:
+                value = hdr[key]
+                comment = hdr.comments[key]
+            except (KeyError, IndexError):
+                value, comment = "N/A", ""
+            if key in ("TARG_RA", "TARG_DEC"):
+                try:
+                    value = round(float(value), 4)
+                except (TypeError, ValueError):
+                    pass
+            rows.append([key, value, comment])
+        return pd.DataFrame(
+            rows, columns=["Key", "Value", "Comment"]
+        ).set_index("Key")
+
+    def get_report_materials(self):
+        return {
+            "title": self[0].header.get("TARG_ID", "NIRDA"),
+            "subtitle": self.start_time.isot,
+            "tables": self.describe(),
+            "star_field": lambda ax=None: self.plot_data(ax=ax),
+            "astrometry": None,
+        }
+
     def plot_data(self, ax=None, **kwargs):
+        called_from_report = ax is not None
         if ax is None:
             _, ax = plt.subplots()
         d = self["science"].data[0]
@@ -110,10 +152,11 @@ class NIRDALevel0HDUList(PandoraHDUList):
         )
         ax.set(
             aspect="equal",
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
             xlabel="ROI Column",
             ylabel="ROI Row",
         )
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         plt.colorbar(im, ax=ax)
         # ax.margins(0)
         return ax
