@@ -339,22 +339,35 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
 
     def describe(self):
         keys = [
-            "NUMSTARS",
             "TARG_ID",
             "TARG_RA",
             "TARG_DEC",
+            "NUMSTARS",
             "FRMSREQD",
             "FRMSCLCT",
-            "NUMSTARS",
             "STARDIMS",
             "NUMPCOAD",
             "FRMPCOAD",
+            "TARG_RLL",
         ]
 
         hdr = self[0].header
+        rows = []
+        for key in keys:
+            try:
+                value = hdr[key]
+                comment = hdr.comments[key]
+            except (KeyError, IndexError):
+                value, comment = "N/A", ""
+            if key in ("TARG_RA", "TARG_DEC"):
+                try:
+                    value = round(float(value), 4)
+                except (TypeError, ValueError):
+                    pass
+            rows.append([key, value, comment])
+
         df = pd.DataFrame(
-            np.asarray([hdr.cards[key] for key in keys]),
-            columns=["Key", "Value", "Comment"],
+            rows, columns=["Key", "Value", "Comment"]
         ).set_index("Key")
         return df
 
@@ -540,12 +553,34 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
     def describe(self):
         keys = [
             "TARG_ID",
+            "TARG_RA",
+            "TARG_DEC",
+            "NUMSTARS",
+            "FRMSREQD",
+            "FRMSCLCT",
+            "STARDIMS",
+            "NUMPCOAD",
+            "FRMPCOAD",
+            "TARG_RLL",
         ]
 
         hdr = self[0].header
+        rows = []
+        for key in keys:
+            try:
+                value = hdr[key]
+                comment = hdr.comments[key]
+            except (KeyError, IndexError):
+                value, comment = "N/A", ""
+            if key in ("TARG_RA", "TARG_DEC"):
+                try:
+                    value = round(float(value), 4)
+                except (TypeError, ValueError):
+                    pass
+            rows.append([key, value, comment])
+
         df = pd.DataFrame(
-            np.asarray([hdr.cards[key] for key in keys]),
-            columns=["Key", "Value", "Comment"],
+            rows, columns=["Key", "Value", "Comment"]
         ).set_index("Key")
         return df
 
