@@ -376,10 +376,11 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         _, dead = self.dead_pixels
         t_min = (t.jd - self.start_time.jd) * 24 * 60
         ax.plot(t_min, hot, label="Hot", **kwargs)
-        ax.plot(t_min, dead, label="Dead", **kwargs)
+        if np.any(dead > 0):
+            ax.plot(t_min, dead, label="Dead", **kwargs)
         ax.legend()
         ax.set(
-            yscale='log',
+            yscale='linear',
             xlabel="Time from Start [min]",
             ylabel="Pixel Count",
         )

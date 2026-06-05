@@ -81,6 +81,35 @@ def get_nirda_exposure_times(hdr):
     return np.asarray(times)
 
 
+def get_nirda_frames_per_integration(hdr):
+    """Number of saved frames per integration reset cycle.
+
+    GRPSAVGD == 0: every read frame is saved → GRPS * READS frames.
+    GRPSAVGD != 0: reads averaged within each group → GRPS frames.
+    """
+    if hdr.get("GRPSAVGD", 1) == 0:
+        return hdr["GRPS"] * hdr["READS"]
+    return hdr["GRPS"]
+
+
+def get_nirda_integrations(hdr, science):
+    """Sum raw science frames into a per-integration cube.
+
+    Parameters
+    ----------
+    hdr     : FITS primary header.
+    science : ndarray, shape (nframes, roi_y, roi_x).
+
+    Returns
+    -------
+    ndarray of shape (INTEGRTS, roi_y, roi_x) — one summed frame per
+    detector reset cycle.
+    """
+    fpi = get_nirda_frames_per_integration(hdr)
+    n_int = hdr["INTEGRTS"]
+    return science.reshape(n_int, fpi, science.shape[1], science.shape[2]).sum(axis=1)
+
+
 @register_hdulist(
     lambda h: (
         h
@@ -101,63 +130,108 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         return NIRDALevel1HDUList(self)
 
     @property
+    def _frames_per_integration(self):
+        return get_nirda_frames_per_integration(self[0].header)
+
+    @property
+    def integrations(self):
+        """Summed flux cube per integration, shape (INTEGRTS, roi_y, roi_x).
+
+        Delegates to get_nirda_integrations — one summed value per detector
+        reset cycle, collapsing the within-ramp read sequence.
+        """
+        return get_nirda_integrations(
+            self[0].header, self["science"].data.astype(float)
+        )
+
+    @property
+    def integration_times(self):
+        """Start time of each integration as an astropy Time array of length INTEGRTS."""
+        fpi = self._frames_per_integration
+        return self.start_time + np.arange(self[0].header["INTEGRTS"]) * fpi * self.frame_time
+
+    @property
     def hot_pixels(self):
-        # Count pixels per frame exceeding median + 5 x sigma_MAD across the
-        # full frame.  MAD x 1.4826 gives a Gaussian-equivalent sigma robust to
-        # the outliers being detected (hot pixels barely move the median).
-        science = self["science"].data.astype(float)  # (nframes, roi_y, roi_x)
-        pixels = science.reshape(self.nframes, -1)
+        # Count pixels per integration exceeding median + 5 x sigma_MAD.
+        # MAD x 1.4826 gives a Gaussian-equivalent sigma robust to the outliers
+        # being detected (hot pixels barely move the median).
+        ints = self.integrations  # (n_int, roi_y, roi_x)
+        pixels = ints.reshape(len(ints), -1)
         med = np.median(pixels, axis=1, keepdims=True)
         sigma_mad = 1.4826 * np.median(np.abs(pixels - med), axis=1, keepdims=True)
         counts = (pixels > med + 5.0 * sigma_mad).sum(axis=1)
-        return self.time, counts
+        return self.integration_times, counts
 
     @property
     def dead_pixels(self):
-        science = self["science"].data  # (nframes, roi_y, roi_x)
-        counts = (science == 0).sum(axis=(1, 2))
-        return self.time, counts
+        # A persistently dead pixel sums to zero across all groups in an integration.
+        ints = self.integrations  # (n_int, roi_y, roi_x)
+        counts = (ints == 0).sum(axis=(1, 2))
+        return self.integration_times, counts
 
     def noise_psd(self, roi_xdelta_right=5, roi_xdelta_left=5):
         """Return the averaged one-sided PSD of background pixel time series.
 
-        Background pixels are taken from the top and bottom ``roi_xdelta_*``
-        columns of the spatial axis (roi_x), where the stellar PSF has fallen
-        off.  Combining both edges hedges against detector column variations
-        and stray sources landing in one region.
+        Uses one sample per integration so the frequency axis reflects the
+        integration cadence, not the raw frame cadence.
 
         Returns
         -------
-        freq : ndarray
-            Frequency array in Hz (length nfreqs, DC=0 excluded).
-        psd : ndarray
-            Mean one-sided PSD in counts^2 / Hz (length nfreqs).
+        freq : ndarray  Frequency in Hz (DC bin excluded).
+        psd  : ndarray  Mean one-sided PSD in counts^2 / Hz.
         """
-        science = self["science"].data.astype(float)  # (nframes, roi_y, roi_x)
+        ints = self.integrations  # (n_int, roi_y, roi_x)
+        n_int = len(ints)
         bg = np.concatenate(
-            [science[:, :, :roi_xdelta_left], science[:, :, -roi_xdelta_right:]],
+            [ints[:, :, :roi_xdelta_left], ints[:, :, -roi_xdelta_right:]],
             axis=2,
-        )  # (nframes, roi_y, n_bg_cols)
-
-        # Flatten roi dimensions; each column is a pixel time series of length nframes
-        pixels = bg.reshape(self.nframes, -1)  # (nframes, n_bg_pixels)
-        # Remove per-pixel DC so the PSD captures AC noise only
+        )
+        pixels = bg.reshape(n_int, -1)
         pixels -= pixels.mean(axis=0, keepdims=True)
 
-        dt = self.frame_time.to(u.second).value
-        n = self.nframes
+        fpi = self._frames_per_integration
+        dt = (fpi * self.frame_time).to(u.second).value
         fs = 1.0 / dt
 
-        fft_vals = np.fft.rfft(pixels, axis=0)  # (nfreqs, n_bg_pixels)
-        # One-sided PSD normalisation: P(f) = 2|X(f)|^2 / (N * fs)
-        # Factor of 2 folds negative frequencies onto positive side.
-        # DC and Nyquist bins are not doubled (they have no negative counterpart).
-        psd = (np.abs(fft_vals) ** 2) / (n * fs)
+        fft_vals = np.fft.rfft(pixels, axis=0)
+        # One-sided PSD: P(f) = 2|X(f)|^2 / (N * fs); DC and Nyquist not doubled.
+        psd = (np.abs(fft_vals) ** 2) / (n_int * fs)
         psd[1:-1] *= 2
 
-        freq = np.fft.rfftfreq(n, d=dt)
-        # Return without the DC bin (freq=0 → undefined on log scale)
+        freq = np.fft.rfftfreq(n_int, d=dt)
         return freq[1:], psd[1:].mean(axis=1)
+
+    def background_rms(self, roi_xdelta_left=5, roi_xdelta_right=5):
+        """Per-integration background RMS after removing each integration's median.
+
+        Returns integration_times and a scalar noise estimate per integration.
+        """
+        ints = self.integrations  # (n_int, roi_y, roi_x)
+        bg = np.concatenate(
+            [ints[:, :, :roi_xdelta_left], ints[:, :, -roi_xdelta_right:]],
+            axis=2,
+        )
+        bg -= np.median(bg, axis=(1, 2), keepdims=True)
+        rms = np.std(bg, axis=(1, 2))
+        return self.integration_times, rms
+
+    def plot_background_rms(self, ax=None, roi_xdelta_left=5, roi_xdelta_right=5, **kwargs):
+        called_from_report = ax is not None
+        if ax is None:
+            _, ax = plt.subplots()
+        t, rms = self.background_rms(
+            roi_xdelta_left=roi_xdelta_left, roi_xdelta_right=roi_xdelta_right
+        )
+        t_min = (t.jd - self.start_time.jd) * 24 * 60
+        ax.plot(t_min, rms, **kwargs)
+        ax.set(
+            yscale='linear',
+            xlabel="Time from Start [min]",
+            ylabel="Background RMS [counts]"
+        )
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
+        return ax
 
     def plot_noise_psd(self, ax=None, roi_xdelta_right=5, roi_xdelta_left=5, **kwargs):
         called_from_report = ax is not None
@@ -176,6 +250,69 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         return ax
 
+    def plot_noise_spectrogram(
+        self,
+        ax=None,
+        roi_xdelta_left=5,
+        roi_xdelta_right=5,
+        nperseg=16,
+        **kwargs,
+    ):
+        """Plot a short-time PSD spectrogram of the background region.
+
+        Splits the background pixel time series into overlapping windows of
+        ``nperseg`` frames (50 % overlap) and computes the PSD for each.
+        Averaging across background pixels at each window reduces pixel-level
+        scatter so the time evolution of the noise floor is visible.
+
+        Parameters
+        ----------
+        nperseg : int
+            Frames per FFT window.  Smaller values give finer time resolution
+            at the cost of coarser frequency resolution.  Default 32.
+        """
+        from scipy.signal import spectrogram as scipy_spectrogram
+
+        called_from_report = ax is not None
+        if ax is None:
+            _, ax = plt.subplots()
+
+        ints = self.integrations  # (n_int, roi_y, roi_x)
+        n_int = len(ints)
+        bg = np.concatenate(
+            [ints[:, :, :roi_xdelta_left], ints[:, :, -roi_xdelta_right:]],
+            axis=2,
+        )
+        pixels = bg.reshape(n_int, -1)
+        pixels -= pixels.mean(axis=0, keepdims=True)
+
+        fpi = self._frames_per_integration
+        dt = (fpi * self.frame_time).to(u.second).value
+        fs = 1.0 / dt
+
+        # Compute spectrogram for each background pixel then average power
+        freq, t_seg, sxx = scipy_spectrogram(
+            pixels.T, fs=fs, nperseg=nperseg, noverlap=nperseg // 2, axis=1
+        )  # sxx: (n_bg_pixels, nfreqs, n_segments)
+        sxx_mean = sxx.mean(axis=0)  # (nfreqs, n_segments)
+
+        pcm = ax.pcolormesh(
+            t_seg / 60,  # convert to minutes
+            freq,
+            np.log10(sxx_mean + 1),
+            shading="nearest",
+            **kwargs,
+        )
+        ax.set(
+            yscale="log",
+            xlabel="Time from Start [min]",
+            ylabel="Frequency [Hz]",
+        )
+        plt.colorbar(pcm, ax=ax, label="log₁₀ PSD")
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
+        return ax
+
     def plot_bad_pixels(self, ax=None, **kwargs):
         called_from_report = ax is not None
         if ax is None:
@@ -184,10 +321,11 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         _, dead = self.dead_pixels
         t_min = (t.jd - self.start_time.jd) * 24 * 60
         ax.plot(t_min, hot, label="Hot", **kwargs)
-        ax.plot(t_min, dead, label="Dead", **kwargs)
+        if np.any(dead > 0):
+            ax.plot(t_min, dead, label="Dead", **kwargs)
         ax.legend()
         ax.set(
-            yscale='log',
+            yscale='linear',
             xlabel="Time from Start [min]",
             ylabel="Pixel Count")
         if not called_from_report:
@@ -236,6 +374,7 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             "star_field": lambda ax=None: self.plot_data(ax=ax),
             "astrometry": lambda ax=None: self.plot_noise_psd(ax=ax),
             "bad_pixels": lambda ax=None: self.plot_bad_pixels(ax=ax),
+            "background_rms": lambda ax=None: self.plot_background_rms(ax=ax),
         }
 
     def plot_data(self, ax=None, **kwargs):
