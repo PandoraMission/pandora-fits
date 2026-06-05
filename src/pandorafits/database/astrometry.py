@@ -14,6 +14,9 @@ import pandas as pd
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.time import Time
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
+
 
 from .. import DATA_DIR, LEVEL0_DIR, __version__
 from ..utils import convert_time, get_dpc_hashkey
@@ -43,21 +46,6 @@ def get_entry(filename, checksums=False):
 
             hdr = hdulist[0].read_header()
             time = convert_time(hdr["CORSTIME"], hdr["FINETIME"])
-            hdr1 = hdulist[1].read_header()
-
-            if "FRMTIME" in hdr:
-                frame_time = hdr["FRMTIME"] / 1000
-            elif "EXPTIMEU" in hdr:
-                frame_time = (
-                    hdr["EXPTIMEU"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
-                ) / 1.0e6
-            elif "EXPTIME" in hdr:
-                frame_time = (
-                    hdr["EXPTIME"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
-                ) / 1.0e6
-
-            nframes = hdr1[f"NAXIS{hdr1['NAXIS']}"]
-            exptime = nframes * frame_time
             for key in ["FINETIME", "CORSTIME"]:
                 if key not in hdr:
                     return
@@ -71,15 +59,11 @@ def get_entry(filename, checksums=False):
                 try:
                     cols = hdulist["ASTROMETRY"].get_colnames()
                     astrometry_data = np.asarray(
-                        np.asarray(
-                            [hdulist["ASTROMETRY"][col][:] for col in cols]
-                        )
+                        np.asarray([hdulist["ASTROMETRY"][col][:] for col in cols])
                     ).T
                     cols = hdulist["TEMP_TIME"].get_colnames()
                     temp_data = np.asarray(
-                        np.asarray(
-                            [hdulist["TEMP_TIME"][col][:] for col in cols]
-                        )
+                        np.asarray([hdulist["TEMP_TIME"][col][:] for col in cols])
                     ).T
 
                     mx = np.min([len(astrometry_data), len(temp_data)])
@@ -102,15 +86,11 @@ def get_entry(filename, checksums=False):
             return [
                 (
                     filename.split("/")[-1],
-                    "/".join(filename.split("/")[:-1]),
                     hdr["CRSOFTV"],
                     __version__,
                     time.jd,
-                    time.jd
-                    + ((temp_data[-1][0] / 1e3) / (24.0 * 60.0 * 60.0)),
-                    time.jd
-                    + ((temp_data[idx][0] / 1e3) / (24.0 * 60.0 * 60.0)),
-                    exptime,
+                    time.jd + ((temp_data[-1][0] / 1e3) / (24.0 * 60.0 * 60.0)),
+                    time.jd + ((temp_data[idx][0] / 1e3) / (24.0 * 60.0 * 60.0)),
                     hashkey,
                     hdr["TARG_ID"],
                     hdr["TARG_RA"],
@@ -119,9 +99,6 @@ def get_entry(filename, checksums=False):
                     astrometry_data[idx][1],
                     astrometry_data[idx][2],
                     temp_data[idx][1],
-                    badchecksum,
-                    baddatasum,
-                    filesize,
                 )
                 for idx in range(len(astrometry_data))
             ]
@@ -134,13 +111,11 @@ class AstrometryDataBase(DataBaseMixins):
     db_path = f"{LEVEL0_DIR}/astrometry.db"
     _sql_key_dict = {
         "filename": "TEXT",
-        "dir": "TEXT",
         "crsoftver": "TEXT",
         "pfsoftver": "TEXT",
         "start": "FLOAT",
         "end": "FLOAT",
         "jd": "FLOAT",
-        "exptime": "FLOAT",
         "dpc_hash_key": "TEXT",
         "targ_id": "STR",
         "targ_ra": "FLOAT",
@@ -149,9 +124,6 @@ class AstrometryDataBase(DataBaseMixins):
         "dec": "FLOAT",
         "roll": "FLOAT",
         "temp": "FLOAT",
-        "badchecksum": "INT",
-        "baddatasum": "INT",
-        "filesize": "FLOAT",
     }
 
     def __repr__(self):
@@ -238,21 +210,28 @@ class AstrometryDataBase(DataBaseMixins):
 
     def crawl_and_add(self):
         root = DATA_DIR
-        for image_type in ["VisSci"]:
-            paths = np.sort(
-                [
-                    str(path)
-                    for path in Path(root).rglob(f"*{image_type}*.fits")
-                    if not self.check_filename_in_database(str(path))
-                ]
-            )
-            rows = []
-            for path in paths:
-                values = get_entry(path)
-                if values is not None:
-                    [rows.append(v) for v in values]
-            self.add_entries(rows)
-        self.update_pointings()
+        with logging_redirect_tqdm():
+            for image_type in ["VisSci"]:
+                paths = np.sort(
+                    [
+                        str(path)
+                        for path in Path(root).rglob(f"*2026-05-0*{image_type}*.fits")
+                        if not self.check_filename_in_database(str(path))
+                    ]
+                )
+                rows = []
+                for path in tqdm(
+                    paths,
+                    total=len(paths),
+                    leave=True,
+                    position=0,
+                    desc=f"{image_type} Files",
+                ):
+                    values = get_entry(path)
+                    if values is not None:
+                        [rows.append(v) for v in values]
+                self.add_entries(rows)
+            self.update_pointings()
 
     # def _update_roll(self):
     #     df = pd.read_sql_query(
@@ -319,3 +298,8 @@ class AstrometryDataBase(DataBaseMixins):
     def update_pointings(self):
         # self._update_roll()
         return
+
+    @property
+    def target_list(self):
+        sql = """SELECT DISTINCT targ_id, targ_ra, targ_dec, dpc_hash_key FROM astrometry;"""
+        return pd.read_sql_query(sql, self.conn)

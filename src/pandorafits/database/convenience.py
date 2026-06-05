@@ -216,9 +216,7 @@ def delete_level3filestorage():
 def delete_logs():
     logger.info("Running `delete_logs`")
     current_logfile = next(
-        h.baseFilename
-        for h in logger.handlers
-        if isinstance(h, logging.FileHandler)
+        h.baseFilename for h in logger.handlers if isinstance(h, logging.FileHandler)
     )
     # Ensure directory exists
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -268,9 +266,7 @@ def get_status():
 
     def get_npointings(name):
         with globals()[name]() as self:
-            self.cur.execute(
-                f"""SELECT COUNT(DISTINCT start) FROM {self.table_name}"""
-            )
+            self.cur.execute(f"""SELECT COUNT(DISTINCT start) FROM {self.table_name}""")
             nrows = self.cur.fetchone()[0]
         return nrows
 
@@ -328,21 +324,21 @@ def get_status():
     return status
 
 
-def get_level_database(level):
+def get_level_database(level, **kwargs):
     with globals()[f"Level{level}DataBase"]() as self:
-        df = self.to_pandas()
+        df = self.to_pandas(**kwargs)
     return df
 
 
-def get_astrometry_database():
+def get_astrometry_database(**kwargs):
     with AstrometryDataBase() as self:
-        df = self.to_pandas()
+        df = self.to_pandas(**kwargs)
     return df
 
 
-def get_target_database():
+def get_target_database(**kwargs):
     with TargetDataBase() as self:
-        df = self.to_pandas()
+        df = self.to_pandas(**kwargs)
     return df
 
 

@@ -5,6 +5,7 @@ import os
 import sqlite3
 import stat
 from datetime import datetime, timezone
+from functools import cached_property
 
 # Third-party
 import numpy as np
@@ -39,12 +40,16 @@ class DataBaseMixins:
         CREATE TABLE IF NOT EXISTS {self.table_name} ({key_string})
         """
         )
-
-        key_string = ", ".join(
-            [f"{key}" for key, item in self._sql_key_dict.items()]
-        )
+        key_string = ", ".join([f"{key}" for key, item in self._sql_key_dict.items()])
         value_string = ", ".join(["?"] * len(self._sql_key_dict))
-        self.update_str = f"""INSERT INTO {self.table_name} ({key_string}) VALUES ({value_string})"""
+        self.update_str = (
+            f"""INSERT INTO {self.table_name} ({key_string}) VALUES ({value_string})"""
+        )
+        if "filename" in self._sql_key_dict.keys():
+            self.cur.execute(
+                f"""CREATE INDEX IF NOT EXISTS  idx_filename ON {self.table_name}(filename);"""
+            )
+
         self.conn.commit()
 
         os.chmod(
@@ -88,9 +93,7 @@ class DataBaseMixins:
         where_clauses = []
 
         if time_range is not None:
-            start, end = _process_time(time_range[0]), _process_time(
-                time_range[1]
-            )
+            start, end = _process_time(time_range[0]), _process_time(time_range[1])
             start, end = np.sort([start, end])
             where_clauses.append("jd BETWEEN ? AND ?")
             params.extend([start, end])
@@ -197,9 +200,7 @@ class ArchiveDataBaseMixins:
         ]
         df = self.to_pandas()
         df["lvlfilepath"] = df.lvldir + "/" + df.lvlfilename
-        k = np.asarray(
-            [os.path.isfile(path) for path in df.lvlfilepath.values]
-        )
+        k = np.asarray([os.path.isfile(path) for path in df.lvlfilepath.values])
         if not k.any():
             logger.info(
                 f"No files found for level {self.level} archive manifest. Storing at {manifest_path}"
@@ -223,9 +224,7 @@ class ArchiveDataBaseMixins:
             .copy()
             .reset_index(drop=True)
         )
-        adf.loc[:, "Obs. Date Start UT"] = Time(
-            adf.jd.values, format="jd"
-        ).isot
+        adf.loc[:, "Obs. Date Start UT"] = Time(adf.jd.values, format="jd").isot
         adf.loc[:, "Obs. Date End"] = (
             adf["jd"].values.copy() + adf.exptime.values.copy() / 86400.0
         )
@@ -240,9 +239,7 @@ class ArchiveDataBaseMixins:
             for path in adf["lvlfilepath"]
         ]
         adf["Delivery Date"] = Time.now().isot
-        adf["Filename"] = [
-            path.split("/")[-1] for path in adf.lvlfilepath.values
-        ]
+        adf["Filename"] = [path.split("/")[-1] for path in adf.lvlfilepath.values]
         adf = adf.rename(
             {
                 "targ_id": "Target Name",

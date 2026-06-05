@@ -91,7 +91,7 @@ def reset_config():
         "level1_dir": user_data_dir("pandorafits") + "/level1",
         "level2_dir": user_data_dir("pandorafits") + "/level2",
         "level3_dir": user_data_dir("pandorafits") + "/level3",
-        "crsoftver": "v3.03",
+        "crsoftver": "v3.06",
     }
     with builtins.open(CONFIGPATH, "w") as configfile:
         config.write(configfile)
@@ -178,10 +178,7 @@ LEVEL1_DIR = config["SETTINGS"]["level1_dir"]
 LEVEL2_DIR = config["SETTINGS"]["level2_dir"]
 LEVEL3_DIR = config["SETTINGS"]["level3_dir"]
 
-[
-    os.makedirs(dir, exist_ok=True)
-    for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]
-]
+[os.makedirs(dir, exist_ok=True) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
 [os.chmod(dir, 0o750) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
 
 
@@ -189,9 +186,7 @@ def display_config() -> pd.DataFrame:
     dfs = []
     for section in config.sections():
         df = pd.DataFrame(
-            np.asarray(
-                [(key, value) for key, value in dict(config[section]).items()]
-            )
+            np.asarray([(key, value) for key, value in dict(config[section]).items()])
         )
         df["section"] = section
         df.columns = ["key", "value", "section"]
