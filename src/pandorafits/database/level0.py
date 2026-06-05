@@ -10,7 +10,10 @@ from datetime import timedelta
 from pathlib import Path
 
 # Third-party
-import fitsio
+try:
+    import fitsio
+except ImportError:  # pragma: no cover - exercised only when fitsio is absent
+    fitsio = None
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
@@ -27,6 +30,11 @@ from .targets import TargetDataBase
 
 
 def get_entry(filename, checksums=False):
+    if fitsio is None:
+        raise ModuleNotFoundError(
+            "fitsio is required for database file parsing but is not available on this platform."
+        )
+
     filesize = os.path.getsize(filename) / (1024 * 1024)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")  # capture all warnings
@@ -381,18 +389,20 @@ class Level0DataBase(DataBaseMixins):
                     FROM targets e
                     WHERE e.targ_id = pointings.targ_id
                     AND e.created <= pointings.start
-                    AND e.targ_ra IS NOT NULL
+                    db_path = os.path.join(LEVEL0_DIR, "level0.db")
                     AND e.targ_ra = e.targ_ra
                     ORDER BY e.created DESC
                     LIMIT 1
                 ),
                 targ_dec = (
                     SELECT e.targ_dec
+                            basename = os.path.basename(filename)
+                            dirname = os.path.dirname(filename)
                     FROM targets e
-                    WHERE e.targ_id = pointings.targ_id
-                    AND e.created <= pointings.start
-                    AND e.targ_dec IS NOT NULL
-                    AND e.targ_dec = e.targ_dec
+                                basename,
+                                basename,
+                                dirname,
+                                dirname,
                     ORDER BY e.created DESC
                     LIMIT 1
                 )
@@ -429,10 +439,10 @@ class Level0DataBase(DataBaseMixins):
             targ_dec = (
                 SELECT t.targ_dec
                 FROM targets.targets t
-                WHERE t.targ_id = pointings.targ_id
+                            f"ATTACH DATABASE '{os.path.join(LEVEL0_DIR, 'targets.db')}' AS targets"
                 AND t.targ_dec IS NOT NULL
                 AND t.targ_dec = t.targ_dec
-                ORDER BY t.created ASC
+                            f"ATTACH DATABASE '{os.path.join(LEVEL0_DIR, 'astrometry.db')}' AS astrometry"
                 LIMIT 1
             )
             WHERE

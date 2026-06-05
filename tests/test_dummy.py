@@ -1,9 +1,12 @@
 # First-party/Local
+import os
+from pathlib import Path
+
 from pandorafits import PACKAGEDIR, logger
 from pandorafits.nirda import NIRDALevel0HDUList
 from pandorafits.visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
 
-TESTDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/tests/"
+TESTDIR = str(Path(PACKAGEDIR).resolve().parents[1] / "tests") + os.sep
 
 
 def test_create_dummy_data_N0():

@@ -2,6 +2,7 @@
 """Tools for keeping a database of pandora files"""
 
 # Third-party
+import os
 from astropy.time import Time
 
 from .. import LEVEL2_DIR, LEVEL3_DIR, __version__
@@ -13,20 +14,21 @@ class Level3DataBase(Level2DataBase):
     """Database for managing Level 2 files."""
 
     table_name = "pointings"
-    db_path = f"{LEVEL3_DIR}/level3.db"
+    db_path = os.path.join(LEVEL3_DIR, "level3.db")
     level = 3
     level_dir = LEVEL3_DIR
 
     def __init__(self):
         super().__init__()
-        self.cur.execute(f"ATTACH DATABASE '{LEVEL2_DIR}/level2.db' AS level2")
+        self.cur.execute(
+            f"ATTACH DATABASE '{os.path.join(LEVEL2_DIR, 'level2.db')}' AS level2"
+        )
 
     def get_output_filename(self, filename_or_row):
         if isinstance(filename_or_row, tuple):
             fname = filename_or_row[0]
         elif isinstance(filename_or_row, str):
-            filename = filename_or_row
-            fname = filename.split("/")[-1] if "/" in filename else filename
+            fname = os.path.basename(filename_or_row)
         elif filename_or_row is None:
             return None
         self.cur.execute(
@@ -37,7 +39,14 @@ class Level3DataBase(Level2DataBase):
         if row is None:
             return None
         t = Time(row[1], format="jd").to_datetime()
-        return f"{self.level_dir}/{t.year}/{t.month}/{t.day}/{get_dpc_hashkey(row[0], row[2], row[3])}/{Time(row[1], format='jd').strftime('%Y-%m-%d__%H-%M-%S')}_{row[0]}_v{__version__.replace('.', '-')}_l3.fits"
+        return os.path.join(
+            self.level_dir,
+            str(t.year),
+            str(t.month),
+            str(t.day),
+            get_dpc_hashkey(row[0], row[2], row[3]),
+            f"{Time(row[1], format='jd').strftime('%Y-%m-%d__%H-%M-%S')}_{row[0]}_v{__version__.replace('.', '-')}_l3.fits",
+        )
 
     def _get_filemap(self):
         from ..nirda import NIRDALevel2HDUList

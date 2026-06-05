@@ -1,5 +1,6 @@
 # Standard library
 import os
+from pathlib import Path
 
 # First-party/Local
 import pandorafits.database as pfdb  # noqa
@@ -7,7 +8,7 @@ from pandorafits import PACKAGEDIR, logger
 from pandorafits.nirda import NIRDALevel0HDUList
 from pandorafits.visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
 
-TESTDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/tests/"
+TESTDIR = str(Path(PACKAGEDIR).resolve().parents[1] / "tests") + os.sep
 
 
 def test_roundtrip():

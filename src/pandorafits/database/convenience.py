@@ -54,7 +54,7 @@ def delete_targetdatabase() -> None:
     FileNotFoundError
         If the database file does not exist.
     """
-    db_path = f"{LEVEL0_DIR}/targets.db"
+    db_path = os.path.join(LEVEL0_DIR, "targets.db")
     if os.path.exists(db_path):
         os.remove(db_path)
         logger.warning(f"Target Database at {db_path} has been deleted.")
@@ -81,7 +81,7 @@ def delete_astrometrydatabase() -> None:
     FileNotFoundError
         If the database file does not exist.
     """
-    db_path = f"{LEVEL0_DIR}/astrometry.db"
+    db_path = os.path.join(LEVEL0_DIR, "astrometry.db")
     if os.path.exists(db_path):
         os.remove(db_path)
         logger.warning(f"Astrometry Database at {db_path} has been deleted.")
@@ -116,7 +116,7 @@ def delete_level0database() -> None:
     FileNotFoundError
         If the database file does not exist.
     """
-    db_path = f"{LEVEL0_DIR}/level0.db"
+    db_path = os.path.join(LEVEL0_DIR, "level0.db")
     if os.path.exists(db_path):
         os.remove(db_path)
         logger.warning(f"Database at {db_path} has been deleted.")
@@ -135,7 +135,7 @@ def delete_level1database() -> None:
     FileNotFoundError
         If the database file does not exist.
     """
-    db_path = f"{LEVEL1_DIR}/level1.db"
+    db_path = os.path.join(LEVEL1_DIR, "level1.db")
     if os.path.exists(db_path):
         os.remove(db_path)
         logger.warning(f"Database at {db_path} has been deleted.")
@@ -151,7 +151,10 @@ def delete_level1filestorage():
         shutil.rmtree(LEVEL1_DIR)
     if not os.path.exists(LEVEL1_DIR):
         os.makedirs(LEVEL1_DIR, exist_ok=True)
-        os.chmod(LEVEL1_DIR, 0o750)
+        try:
+            os.chmod(LEVEL1_DIR, 0o750)
+        except (AttributeError, NotImplementedError, OSError):
+            pass
     logger.info("Finished `delete_level1filestorage`")
 
 
@@ -164,7 +167,7 @@ def delete_level2database() -> None:
     FileNotFoundError
         If the database file does not exist.
     """
-    db_path = f"{LEVEL2_DIR}/level2.db"
+    db_path = os.path.join(LEVEL2_DIR, "level2.db")
     if os.path.exists(db_path):
         os.remove(db_path)
         logger.warning(f"Database at {db_path} has been deleted.")
@@ -180,7 +183,10 @@ def delete_level2filestorage():
         shutil.rmtree(LEVEL2_DIR)
     if not os.path.exists(LEVEL2_DIR):
         os.makedirs(LEVEL2_DIR, exist_ok=True)
-        os.chmod(LEVEL2_DIR, 0o750)
+        try:
+            os.chmod(LEVEL2_DIR, 0o750)
+        except (AttributeError, NotImplementedError, OSError):
+            pass
     logger.info("Finished `delete_level2filestorage`")
 
 
@@ -193,7 +199,7 @@ def delete_level3database() -> None:
     FileNotFoundError
         If the database file does not exist.
     """
-    db_path = f"{LEVEL3_DIR}/level3.db"
+    db_path = os.path.join(LEVEL3_DIR, "level3.db")
     if os.path.exists(db_path):
         os.remove(db_path)
         logger.warning(f"Database at {db_path} has been deleted.")
@@ -209,7 +215,10 @@ def delete_level3filestorage():
         shutil.rmtree(LEVEL3_DIR)
     if not os.path.exists(LEVEL3_DIR):
         os.makedirs(LEVEL3_DIR, exist_ok=True)
-        os.chmod(LEVEL3_DIR, 0o750)
+        try:
+            os.chmod(LEVEL3_DIR, 0o750)
+        except (AttributeError, NotImplementedError, OSError):
+            pass
     logger.info("Finished `delete_level3filestorage`")
 
 

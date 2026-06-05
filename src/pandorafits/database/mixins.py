@@ -5,6 +5,7 @@ import os
 import sqlite3
 import stat
 from datetime import datetime, timezone
+from pathlib import Path
 
 # Third-party
 import numpy as np
@@ -47,13 +48,16 @@ class DataBaseMixins:
         self.update_str = f"""INSERT INTO {self.table_name} ({key_string}) VALUES ({value_string})"""
         self.conn.commit()
 
-        os.chmod(
-            self.db_path,
-            stat.S_IRUSR
-            | stat.S_IWUSR  # owner: read/write
-            | stat.S_IRGRP
-            | stat.S_IWGRP,  # group: read/write
-        )
+        try:
+            os.chmod(
+                self.db_path,
+                stat.S_IRUSR
+                | stat.S_IWUSR  # owner: read/write
+                | stat.S_IRGRP
+                | stat.S_IWGRP,  # group: read/write
+            )
+        except (AttributeError, NotImplementedError, OSError):
+            pass
 
     def __enter__(self):
         return self
@@ -106,9 +110,10 @@ class DataBaseMixins:
         return pd.read_sql_query(sql, self.conn, params=params)
 
     def check_filename_in_database(self, filename):
+        fname = Path(filename).name
         self.cur.execute(
             f"SELECT 1 FROM {self.table_name} WHERE filename=?",
-            ((filename.split("/")[-1] if "/" in filename else filename),),
+            (fname,),
         )
         return self.cur.fetchone() is not None
 
@@ -172,10 +177,9 @@ class DataBaseMixins:
 class ArchiveDataBaseMixins:
     def to_archive_manifest(self):
         logger.info(f"Creating Level {self.level} archive manifest.")
-        manifest_path = (
-            globals()[f"LEVEL{self.level}_DIR"]
-            + "/"
-            + f"level{self.level}_manifest.csv"
+        manifest_path = os.path.join(
+            globals()[f"LEVEL{self.level}_DIR"],
+            f"level{self.level}_manifest.csv",
         )
         columns = [
             "Target Name",
@@ -240,9 +244,7 @@ class ArchiveDataBaseMixins:
             for path in adf["lvlfilepath"]
         ]
         adf["Delivery Date"] = Time.now().isot
-        adf["Filename"] = [
-            path.split("/")[-1] for path in adf.lvlfilepath.values
-        ]
+        adf["Filename"] = [Path(path).name for path in adf.lvlfilepath.values]
         adf = adf.rename(
             {
                 "targ_id": "Target Name",

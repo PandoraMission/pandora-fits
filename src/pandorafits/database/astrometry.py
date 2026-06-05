@@ -8,7 +8,10 @@ from datetime import timedelta
 from pathlib import Path
 
 # Third-party
-import fitsio
+try:
+    import fitsio
+except ImportError:  # pragma: no cover - exercised only when fitsio is absent
+    fitsio = None
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
@@ -21,6 +24,11 @@ from .mixins import DataBaseMixins
 
 
 def get_entry(filename, checksums=False):
+    if fitsio is None:
+        raise ModuleNotFoundError(
+            "fitsio is required for database file parsing but is not available on this platform."
+        )
+
     filesize = os.path.getsize(filename) / (1024 * 1024)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")  # capture all warnings
@@ -101,8 +109,8 @@ def get_entry(filename, checksums=False):
                 return None
             return [
                 (
-                    filename.split("/")[-1],
-                    "/".join(filename.split("/")[:-1]),
+                    os.path.basename(filename),
+                    os.path.dirname(filename),
                     hdr["CRSOFTV"],
                     __version__,
                     time.jd,
@@ -131,7 +139,7 @@ class AstrometryDataBase(DataBaseMixins):
     """Database for managing astrometry of Pandora"""
 
     table_name = "astrometry"
-    db_path = f"{LEVEL0_DIR}/astrometry.db"
+    db_path = os.path.join(LEVEL0_DIR, "astrometry.db")
     _sql_key_dict = {
         "filename": "TEXT",
         "dir": "TEXT",

@@ -129,7 +129,7 @@ class TargetDataBase(DataBaseMixins):
     """Database for managing astrometry of Pandora"""
 
     table_name = "targets"
-    db_path = f"{LEVEL0_DIR}/targets.db"
+    db_path = os.path.join(LEVEL0_DIR, "targets.db")
     _sql_key_dict = {
         "filename": "TEXT",
         "visit_start": "FLOAT",
@@ -170,7 +170,7 @@ class TargetDataBase(DataBaseMixins):
             df = calendar_to_targets(filename)
             return [
                 (
-                    filename.split("/")[-1],
+                    os.path.basename(filename),
                     float(df.iloc[idx].visit_start),
                     float(df.iloc[idx].visit_end),
                     float(df.iloc[idx].created),

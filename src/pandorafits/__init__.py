@@ -2,6 +2,7 @@
 import configparser  # noqa: E402
 import logging  # noqa: E402
 import os  # noqa
+from pathlib import Path
 from importlib.metadata import PackageNotFoundError, version  # noqa
 import pandoraaperture as pa  # noqa
 
@@ -14,15 +15,17 @@ from appdirs import user_config_dir, user_data_dir  # noqa: E402
 # Third-party
 from rich.console import Console  # noqa: E402
 from rich.logging import RichHandler  # noqa: E402
-from glob import glob  # noqa: E402
 from pandoraspacecraft import PandoraSpacecraft
 import builtins
 
-PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
-FORMATSDIR = f"{PACKAGEDIR}/formats/"
-DOCSDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/docs/"
-TESTDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/tests/"
-PANDORASTYLE = glob(f"{PACKAGEDIR}/data/pandora.mplstyle")
+PACKAGEDIR = str(Path(__file__).resolve().parent)
+PROJECTDIR = str(Path(__file__).resolve().parents[2])
+FORMATSDIR = str(Path(PACKAGEDIR) / "formats") + os.sep
+DOCSDIR = str(Path(PROJECTDIR) / "docs") + os.sep
+TESTDIR = str(Path(PROJECTDIR) / "tests") + os.sep
+PANDORASTYLE = [
+    str(path) for path in (Path(PACKAGEDIR) / "data").glob("pandora.mplstyle")
+]
 logger = logging.getLogger("pandorafits")
 
 
@@ -68,13 +71,19 @@ class PandoraLogger(logging.Logger):
         self.addHandler(file_handler)
 
 
-CONFIGDIR = user_config_dir("pandorafits")
-os.makedirs(CONFIGDIR, exist_ok=True)
-CONFIGPATH = os.path.join(CONFIGDIR, "config.ini")
+def _safe_makedirs(path: str | os.PathLike[str]) -> None:
+    os.makedirs(path, exist_ok=True)
+
+
+def _safe_chmod(path: str | os.PathLike[str], mode: int) -> None:
+    try:
+        os.chmod(path, mode)
+    except (AttributeError, NotImplementedError, OSError):
+        pass
 
 
 CONFIGDIR = user_config_dir("pandorafits")
-os.makedirs(CONFIGDIR, exist_ok=True)
+_safe_makedirs(CONFIGDIR)
 CONFIGPATH = os.path.join(CONFIGDIR, "config.ini")
 
 
@@ -82,15 +91,16 @@ def reset_config():
     """Set the config to defaults."""
     # use this function to set your default configuration parameters.
     config = configparser.ConfigParser()
+    user_root = Path(user_data_dir("pandorafits"))
     config["SETTINGS"] = {
         "log_level": "INFO",
-        "data_dir": "/Users/chedges/Desktop/PandoraFirstLight/data2/",
-        "calendar_dir": "/Users/chedges/Desktop/",
-        "log_dir": user_data_dir("pandorafits") + "/logs",
-        "level0_dir": user_data_dir("pandorafits"),
-        "level1_dir": user_data_dir("pandorafits") + "/level1",
-        "level2_dir": user_data_dir("pandorafits") + "/level2",
-        "level3_dir": user_data_dir("pandorafits") + "/level3",
+        "data_dir": str(user_root / "data"),
+        "calendar_dir": str(user_root / "calendar"),
+        "log_dir": str(user_root / "logs"),
+        "level0_dir": str(user_root),
+        "level1_dir": str(user_root / "level1"),
+        "level2_dir": str(user_root / "level2"),
+        "level3_dir": str(user_root / "level3"),
         "crsoftver": "v3.03",
     }
     with builtins.open(CONFIGPATH, "w") as configfile:
@@ -139,14 +149,14 @@ def get_logger(name="pandorafits"):
 
     jobid = os.environ.get("PBS_JOBID", "nojob")
     pid = os.getpid()
-    logfile = f"{LOG_DIR}/pandoraDPC_{jobid}_{pid}.log"
+    logfile = os.path.join(LOG_DIR, f"pandoraDPC_{jobid}_{pid}.log")
     logger = PandoraLogger("pandora", logfile=logfile)
     return logger
 
 
 LOG_DIR = config["SETTINGS"]["log_dir"]
-os.makedirs(LOG_DIR, exist_ok=True)
-os.chmod(LOG_DIR, 0o750)
+_safe_makedirs(LOG_DIR)
+_safe_chmod(LOG_DIR, 0o750)
 logger = get_logger("pandorafits")
 logger.setLevel(config["SETTINGS"]["log_level"])
 
@@ -179,10 +189,10 @@ LEVEL2_DIR = config["SETTINGS"]["level2_dir"]
 LEVEL3_DIR = config["SETTINGS"]["level3_dir"]
 
 [
-    os.makedirs(dir, exist_ok=True)
+    _safe_makedirs(dir)
     for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]
 ]
-[os.chmod(dir, 0o750) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
+[_safe_chmod(dir, 0o750) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
 
 
 def display_config() -> pd.DataFrame:
