@@ -180,6 +180,7 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         return mask
 
     def plot_data(self, ax=None, **kwargs):
+        called_from_report = ax is not None
         if ax is None:
             _, ax = plt.subplots()
         d = self["science"].data[0]
@@ -189,10 +190,11 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         im = ax.pcolormesh(d, vmin=vmin, vmax=vmax, **kwargs)
         ax.set(
             aspect="equal",
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
             xlabel="Panel Column",
             ylabel="Panel Row",
         )
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         plt.colorbar(im, ax=ax)
         # ax.margins(0)
         return ax
@@ -310,25 +312,20 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         return df
 
     def plot_astrometry(self, ax=None, **kwargs):
+        called_from_report = ax is not None
         if ax is None:
             _, ax = plt.subplots()
         df = self.get_position_data()
-        ax.plot(
-            df.t.values / 1e3,
-            (df.avg_ra.values - df.avg_ra.mean()) * 3600,
-            label="RA",
-        )
-        ax.plot(
-            df.t.values / 1e3,
-            (df.avg_dec.values - df.avg_dec.mean()) * 3600,
-            label="Dec",
-        )
+        t_min = (df.t.values - self.start_time.jd) * 24 * 60
+        ax.plot(t_min, (df.avg_ra.values - df.avg_ra.mean()) * 3600, label="RA")
+        ax.plot(t_min, (df.avg_dec.values - df.avg_dec.mean()) * 3600, label="Dec")
         ax.legend()
         ax.set(
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
-            xlabel="Time in Exposure [s]",
-            ylabel="Position - Mean Position [arcsecond]",
+            xlabel="Time from Start [min]",
+            ylabel="Position - Mean Position\n[arcsecond]",
         )
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         return ax
 
     def describe(self):
@@ -339,26 +336,39 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             "TARG_DEC",
             "FRMSREQD",
             "FRMSCLCT",
-            "NUMSTARS",
             "STARDIMS",
             "NUMPCOAD",
             "FRMPCOAD",
+            "TARG_RLL",
         ]
 
         hdr = self[0].header
-        df = pd.DataFrame(
-            np.asarray([hdr.cards[key] for key in keys]),
-            columns=["Key", "Value", "Comment"],
+        rows = []
+        for key in keys:
+            try:
+                value = hdr[key]
+                comment = hdr.comments[key]
+            except (KeyError, IndexError):
+                value, comment = "N/A", ""
+            if key in ("TARG_RA", "TARG_DEC"):
+                try:
+                    value = round(float(value), 4)
+                except (TypeError, ValueError):
+                    pass
+            rows.append([key, value, comment])
+
+        return pd.DataFrame(
+            rows, columns=["Key", "Value", "Comment"]
         ).set_index("Key")
-        return df
 
     def get_report_materials(self):
-        return [
-            lambda ax=None: self.plot_data(ax=ax),
-            lambda ax=None: self.plot_astrometry(ax=ax),
-            None,
-            lambda ax=None: self.plot_description(ax=ax),
-        ]
+        return {
+            "title": self[0].header["targ_id"],
+            "subtitle": self.start_time.isot,
+            "tables": self.describe(),
+            "star_field": lambda ax=None: self.plot_data(ax=ax),
+            "astrometry": lambda ax=None: self.plot_astrometry(ax=ax),
+        }
 
     def get_earth_angle(self):
         return ps.get_angle_to_body(
@@ -507,6 +517,7 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
     instrument = "VISDA"
 
     def plot_data(self, ax=None, **kwargs):
+        called_from_report = ax is not None
         if ax is None:
             _, ax = plt.subplots()
         d = self["science"].data[0]
@@ -516,10 +527,11 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
         im = ax.pcolormesh(d, vmin=vmin, vmax=vmax, **kwargs)
         ax.set(
             aspect="equal",
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
             xlabel="Column",
             ylabel="Row",
         )
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         plt.colorbar(im, ax=ax)
         # ax.margins(0)
         return ax
