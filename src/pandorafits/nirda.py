@@ -118,6 +118,64 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         counts = (science == 0).sum(axis=(1, 2))
         return self.time, counts
 
+    def noise_psd(self, roi_xdelta_right=5, roi_xdelta_left=5):
+        """Return the averaged one-sided PSD of background pixel time series.
+
+        Background pixels are taken from the top and bottom ``roi_xdelta_*``
+        columns of the spatial axis (roi_x), where the stellar PSF has fallen
+        off.  Combining both edges hedges against detector column variations
+        and stray sources landing in one region.
+
+        Returns
+        -------
+        freq : ndarray
+            Frequency array in Hz (length nfreqs, DC=0 excluded).
+        psd : ndarray
+            Mean one-sided PSD in counts^2 / Hz (length nfreqs).
+        """
+        science = self["science"].data.astype(float)  # (nframes, roi_y, roi_x)
+        bg = np.concatenate(
+            [science[:, :, :roi_xdelta_left], science[:, :, -roi_xdelta_right:]],
+            axis=2,
+        )  # (nframes, roi_y, n_bg_cols)
+
+        # Flatten roi dimensions; each column is a pixel time series of length nframes
+        pixels = bg.reshape(self.nframes, -1)  # (nframes, n_bg_pixels)
+        # Remove per-pixel DC so the PSD captures AC noise only
+        pixels -= pixels.mean(axis=0, keepdims=True)
+
+        dt = self.frame_time.to(u.second).value
+        n = self.nframes
+        fs = 1.0 / dt
+
+        fft_vals = np.fft.rfft(pixels, axis=0)  # (nfreqs, n_bg_pixels)
+        # One-sided PSD normalisation: P(f) = 2|X(f)|^2 / (N * fs)
+        # Factor of 2 folds negative frequencies onto positive side.
+        # DC and Nyquist bins are not doubled (they have no negative counterpart).
+        psd = (np.abs(fft_vals) ** 2) / (n * fs)
+        psd[1:-1] *= 2
+
+        freq = np.fft.rfftfreq(n, d=dt)
+        # Return without the DC bin (freq=0 → undefined on log scale)
+        return freq[1:], psd[1:].mean(axis=1)
+
+    def plot_noise_psd(self, ax=None, roi_xdelta_right=5, roi_xdelta_left=5, **kwargs):
+        called_from_report = ax is not None
+        if ax is None:
+            _, ax = plt.subplots()
+        freq, psd = self.noise_psd(
+            roi_xdelta_right=roi_xdelta_right, roi_xdelta_left=roi_xdelta_left
+        )
+        ax.loglog(freq, psd, **kwargs)
+        # Overlay a 1/f reference line anchored to the lowest frequency bin
+        ref = psd[0] * (freq[0] / freq)
+        ax.loglog(freq, ref, ls="--", color="gray", lw=1, label="1/f ref")
+        ax.legend()
+        ax.set(xlabel="Frequency [Hz]", ylabel="PSD [counts² / Hz]")
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
+        return ax
+
     def plot_bad_pixels(self, ax=None, **kwargs):
         called_from_report = ax is not None
         if ax is None:
@@ -176,7 +234,7 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             "subtitle": self.start_time.isot,
             "tables": self.describe(),
             "star_field": lambda ax=None: self.plot_data(ax=ax),
-            "astrometry": None,
+            "astrometry": lambda ax=None: self.plot_noise_psd(ax=ax),
             "bad_pixels": lambda ax=None: self.plot_bad_pixels(ax=ax),
         }
 
@@ -184,10 +242,17 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         called_from_report = ax is not None
         if ax is None:
             _, ax = plt.subplots()
-        d = np.median(self["science"].data, axis=0)
+        
+        use_log = kwargs.pop("log", True)
+        if use_log:
+            d = np.median(np.log(self["science"].data), axis=0)
+            max_add = 0.3
+        else:
+            d = np.median(self["science"].data, axis=0)
+            max_add = 100.0
         k = d != 0
         vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1.0))
-        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1.0) + 100)
+        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1.0) + max_add) 
         im = ax.pcolormesh(
             self.column, self.row, d, vmin=vmin, vmax=vmax, **kwargs
         )
