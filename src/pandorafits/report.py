@@ -40,7 +40,7 @@ class ReportMixins:
         _plot_table(ax, self.describe())
         return ax
 
-    def _build_report_figure(self, *, dpi: int = 150):
+    def _build_report_figure(self, *, dpi: int = 150, wspace: float = 1.28, hspace: float = 0.2):
         """
         5-row x 6-col GridSpec report. figsize (12, 10) gives equal 2-inch squares.
 
@@ -53,7 +53,7 @@ class ReportMixins:
         remainder           blank
         """
         fig = plt.figure(figsize=(12, 10), dpi=dpi, constrained_layout=True)
-        gs = fig.add_gridspec(5, 6)
+        gs = fig.add_gridspec(5, 6, wspace=wspace, hspace=hspace)
 
         ax_t1    = fig.add_subplot(gs[0:1, 0:3])
         ax_t2    = fig.add_subplot(gs[0:1, 3:6])

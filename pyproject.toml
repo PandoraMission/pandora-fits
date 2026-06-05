@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pandorafits"
-version = "0.4.7"
+version = "0.5.0"
 description = "Tools to work with fits files for Pandora"
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 license = "MIT"
