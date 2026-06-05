@@ -180,6 +180,7 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         return mask
 
     def plot_data(self, ax=None, **kwargs):
+        ax_provided = ax is not None
         if ax is None:
             _, ax = plt.subplots()
         d = self["science"].data[0]
@@ -192,6 +193,9 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             xlabel="Panel Column",
             ylabel="Panel Row",
         )
+        if not ax_provided:
+            # Don't add titles for figures made for fits reports.
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         plt.colorbar(im, ax=ax)
         # ax.margins(0)
         return ax
@@ -309,6 +313,7 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         return df
 
     def plot_astrometry(self, ax=None, **kwargs):
+        ax_provided = ax is not None
         if ax is None:
             _, ax = plt.subplots()
         df = self.get_position_data()
@@ -327,6 +332,9 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             xlabel="Time in Exposure [s]",
             ylabel="Position - Mean Position [arcsecond]",
         )
+        if not ax_provided:
+            # Don't add titles for figures made for fits reports.
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         return ax
 
     def describe(self):
@@ -509,6 +517,7 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
     instrument = "VISDA"
 
     def plot_data(self, ax=None, **kwargs):
+        ax_provided = ax is not None
         if ax is None:
             _, ax = plt.subplots()
         d = self["science"].data[0]
@@ -521,6 +530,9 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
             xlabel="Column",
             ylabel="Row",
         )
+        if not ax_provided:
+            # Don't add titles for figures made for fits reports.
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         plt.colorbar(im, ax=ax)
         # ax.margins(0)
         return ax
