@@ -179,26 +179,6 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
                     star += 1
         return mask
 
-    def plot_data(self, ax=None, **kwargs):
-        called_from_report = ax is not None
-        if ax is None:
-            _, ax = plt.subplots()
-        d = np.median(self["science"].data, axis=0)
-        k = d != 0
-        vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1))
-        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1) + 100)
-        im = ax.pcolormesh(d, vmin=vmin, vmax=vmax, **kwargs)
-        ax.set(
-            aspect="equal",
-            xlabel="Panel Column",
-            ylabel="Panel Row",
-        )
-        if not called_from_report:
-            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
-        plt.colorbar(im, ax=ax)
-        # ax.margins(0)
-        return ax
-
     @property
     def astrometry(self):
         ra, dec, rot = np.asarray(
@@ -223,20 +203,18 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
 
     @property
     def hot_pixels(self):
-        # Count pixels per coadded frame that exceed median + 5 × σ_MAD.
-        #
-        # MAD (Median Absolute Deviation) scaled by 1.4826 gives a Gaussian-
-        # equivalent σ that is robust to the outliers being detected:
-        # a handful of hot or cosmic-ray pixels inflates the standard deviation
-        # dramatically but moves the median by less than one count, so the
-        # threshold stays anchored to the bulk of the pixel distribution
-        # (Rousseeuw & Croux 1993).  5 σ_MAD gives a false-alarm rate of
-        # ~6 × 10⁻⁷ per pixel per frame for Gaussian noise — aggressive enough
-        # to catch real defects while avoiding flagging faint stars.
-        #
-        # Border pixels (structural zeros between sub-frame panels) are excluded
-        # via border_mask so they do not bias the median or inflate the count.
-        science = self["science"].data  # (nframes, panel_h, panel_w)
+        """
+        Count pixels per integration exceeding median + 5 x sigma_median_abs_dev.
+        MAD x 1.4826 gives a Gaussian-equivalent sigma robust to the outliers
+        being detected (hot pixels barely move the median).
+
+        Returns
+        -------
+        integration_times : np.ndarray
+            astropy Time array of length INTEGRTS.
+        counts : np.ndarray
+            number of hot pixels over time.
+        """
         valid = ~self.border_mask.ravel()
         pixels = science.reshape(self.nframes, -1).astype(float)[:, valid]
         med = np.median(pixels, axis=1, keepdims=True)
@@ -246,16 +224,16 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
 
     @property
     def dead_pixels(self):
-        # Count pixels reading zero DN per coadded frame within valid ROI regions.
-        #
-        # A pixel that accumulates zero counts across every sub-exposure in a coadd
-        # has failed to register charge, the standard indicator of a dead or
-        # permanently trapped pixel in a solid-state detector (Janesick 2001).
-        # Zero is the correct floor because coadding sums sub-exposures, so any
-        # genuine signal grows proportionally while a non-responsive pixel remains
-        # stuck at zero regardless of scene brightness. Inter-panel border pixels,
-        # which are also zero by construction, are excluded via border_mask to avoid
-        # conflating structural padding with detector defects.
+        """
+        A persistently dead pixel sums to zero across all groups in an integration.
+
+        Returns
+        -------
+        integration_times : np.ndarray
+            astropy Time array of length INTEGRTS.
+        counts : np.ndarray
+            number of dead pixels over time.
+        """
         science = self["science"].data  # (nframes, panel_h, panel_w)
         valid = ~self.border_mask.ravel()
         counts = (science.reshape(self.nframes, -1)[:, valid] == 0).sum(axis=1)
@@ -350,6 +328,26 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
                 / 86400
             )
         return df
+    
+    def plot_data(self, ax=None, **kwargs):
+        called_from_report = ax is not None
+        if ax is None:
+            _, ax = plt.subplots()
+        d = np.median(self["science"].data, axis=0)
+        k = d != 0
+        vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1))
+        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1) + 100)
+        im = ax.pcolormesh(d, vmin=vmin, vmax=vmax, **kwargs)
+        ax.set(
+            aspect="equal",
+            xlabel="Panel Column",
+            ylabel="Panel Row",
+        )
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
+        plt.colorbar(im, ax=ax)
+        # ax.margins(0)
+        return ax
 
     def plot_astrometry(self, ax=None, **kwargs):
         called_from_report = ax is not None

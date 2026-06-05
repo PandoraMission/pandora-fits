@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 
-def _plot_table(ax, df):
-    """Render a compact DataFrame table sized exactly to content."""
+def plot_table(ax, df):
+    """Render a compact DataFrame table sized to the content."""
     ax.axis("off")
     if df.empty:
         return
@@ -37,20 +37,16 @@ class ReportMixins:
         """Standalone single-axes description table."""
         if ax is None:
             _, ax = plt.subplots()
-        _plot_table(ax, self.describe())
+        plot_table(ax, self.describe())
         return ax
+    
+    def get_report_materials(self, *args, **kwargs):
+        """Details that make up a report. This is overridden by sub classes. """
+        return None
 
     def _build_report_figure(self, *, dpi: int = 150, wspace: float = 1.28, hspace: float = 0.2):
         """
-        5-row x 6-col GridSpec report. figsize (12, 10) gives equal 2-inch squares.
-
-        Layout
-        ------
-        rows 0-1, cols 0-2  description table (first half of rows)
-        rows 0-1, cols 3-5  description table (overflow)
-        row  2,   cols 0-1  star field image
-        row  2,   cols 2-3  position - mean-position time series
-        remainder           blank
+        6-row x 6-col GridSpec report. figsize (12, 10) gives equal 2-inch squares.
         """
         fig = plt.figure(figsize=(12, 10), dpi=dpi, constrained_layout=True)
         gs = fig.add_gridspec(6, 6, wspace=wspace, hspace=hspace)
@@ -63,7 +59,11 @@ class ReportMixins:
         ax_ramp  = fig.add_subplot(gs[4:6, 0:2])
         ax_bgrms = fig.add_subplot(gs[4:6, 4:6])
 
+        # Overridden by sub classes
         materials = self.get_report_materials()
+        if materials is None:
+            # Probably being called by the wrong class. Break early.
+            return fig
 
         title = materials.get("title", "")
         subtitle = materials.get("subtitle", "")
@@ -84,8 +84,8 @@ class ReportMixins:
         df = materials.get("tables")
         if df is not None and not df.empty:
             mid = (len(df) + 1) // 2
-            _plot_table(ax_t1, df.iloc[:mid])
-            _plot_table(ax_t2, df.iloc[mid:])
+            plot_table(ax_t1, df.iloc[:mid])
+            plot_table(ax_t2, df.iloc[mid:])
         else:
             ax_t1.axis("off")
             ax_t2.axis("off")

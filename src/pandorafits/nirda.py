@@ -173,16 +173,30 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
 
     @property
     def integration_times(self):
-        """Start time of each integration; length matches actual recorded frames."""
+        """Start time of each integration; length matches actual recorded frames.
+        
+        Returns
+        -------
+        integration_times : astropy Time array of length INTEGRTS.
+        """
         fpi = self._frames_per_integration
         n_int = self["science"].data.shape[0] // fpi
         return self.start_time + np.arange(n_int) * fpi * self.frame_time
 
     @property
     def hot_pixels(self):
-        # Count pixels per integration exceeding median + 5 x sigma_MAD.
-        # MAD x 1.4826 gives a Gaussian-equivalent sigma robust to the outliers
-        # being detected (hot pixels barely move the median).
+        """
+        Count pixels per integration exceeding median + 5 x sigma_median_abs_dev.
+        MAD x 1.4826 gives a Gaussian-equivalent sigma robust to the outliers
+        being detected (hot pixels barely move the median).
+
+        Returns
+        -------
+        integration_times : np.ndarray
+            astropy Time array of length INTEGRTS.
+        counts : np.ndarray
+            number of hot pixels over time.
+        """
         ints = self.integrations  # (n_int, roi_y, roi_x)
         pixels = ints.reshape(len(ints), -1)
         med = np.median(pixels, axis=1, keepdims=True)
@@ -192,7 +206,16 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
 
     @property
     def dead_pixels(self):
-        # A persistently dead pixel sums to zero across all groups in an integration.
+        """
+        A persistently dead pixel sums to zero across all groups in an integration.
+
+        Returns
+        -------
+        integration_times : np.ndarray
+            astropy Time array of length INTEGRTS.
+        counts : np.ndarray
+            number of dead pixels over time.
+        """
         ints = self.integrations  # (n_int, roi_y, roi_x)
         counts = (ints == 0).sum(axis=(1, 2))
         return self.integration_times, counts
@@ -210,8 +233,10 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
 
         Returns
         -------
-        integration_times : astropy Time array of length INTEGRTS.
-        rms_per_int       : ndarray (INTEGRTS,) — median pixel ramp residual RMS.
+        integration_times : np.ndarray (INTEGRTS,)
+            astropy Time array of length INTEGRTS.
+        rms_per_int : np.ndarray (INTEGRTS,)
+            median pixel ramp residual RMS.
         """
         science = self["science"].data.astype(float)  # (nframes, roi_y, roi_x)
         fpi = self._frames_per_integration
@@ -245,8 +270,10 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
 
         Returns
         -------
-        freq : ndarray  Frequency in Hz (DC bin excluded).
-        psd  : ndarray  Mean one-sided PSD in counts^2 / Hz.
+        freq : np.ndarray (INTEGRTS - 1,)
+            Frequency in Hz (DC bin excluded).
+        psd : np.ndarray (INTEGRTS - 1,)
+            Mean one-sided PSD in counts^2 / Hz.
         """
         ints = self.integrations  # (n_int, roi_y, roi_x)
         n_int = len(ints)
@@ -273,6 +300,13 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         """Per-integration background RMS after removing each integration's median.
 
         Returns integration_times and a scalar noise estimate per integration.
+
+        Returns
+        -------
+        integration_times : np.ndarray
+            astropy Time array of length INTEGRTS.
+        rms : np.ndarray
+            Background RMS over time
         """
         ints = self.integrations  # (n_int, roi_y, roi_x)
         bg = np.concatenate(
@@ -284,6 +318,7 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         return self.integration_times, rms
 
     def plot_background_rms(self, ax=None, roi_xdelta_left=5, roi_xdelta_right=5, **kwargs):
+        """Plot background RMS over time in an observation."""
         called_from_report = ax is not None
         if ax is None:
             _, ax = plt.subplots()
@@ -302,6 +337,7 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         return ax
 
     def plot_noise_psd(self, ax=None, roi_xdelta_right=5, roi_xdelta_left=5, **kwargs):
+        """Plot background noise PSD found during an observation."""
         called_from_report = ax is not None
         if ax is None:
             _, ax = plt.subplots()
@@ -319,13 +355,13 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         return ax
 
     def plot_noise_spectrogram(
-        self,
-        ax=None,
-        roi_xdelta_left=5,
-        roi_xdelta_right=5,
-        nperseg=None,
-        **kwargs,
-    ):
+            self,
+            ax=None,
+            roi_xdelta_left=5,
+            roi_xdelta_right=5,
+            nperseg=None,
+            **kwargs,
+        ):
         """Plot a short-time PSD spectrogram of the background region.
 
         Splits the background pixel time series into overlapping windows of
@@ -388,6 +424,7 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         return ax
 
     def plot_ramp_linearity(self, ax=None, **kwargs):
+        """Plot ramp linearity over time during an observation."""
         called_from_report = ax is not None
         if ax is None:
             _, ax = plt.subplots()
@@ -419,6 +456,35 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             ylabel="Pixel Count")
         if not called_from_report:
             ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
+        return ax
+    
+    def plot_data(self, ax=None, **kwargs):
+        called_from_report = ax is not None
+        if ax is None:
+            _, ax = plt.subplots()
+        
+        use_log = kwargs.pop("log", True)
+        if use_log:
+            d = np.median(np.log(self.integrations), axis=0)
+            max_add = 0.3
+        else:
+            d = np.median(self.integrations, axis=0)
+            max_add = 100.0
+        k = d != 0
+        vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1.0))
+        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1.0) + max_add) 
+        im = ax.pcolormesh(
+            self.column, self.row, d, vmin=vmin, vmax=vmax, **kwargs
+        )
+        ax.set(
+            aspect="equal",
+            xlabel="ROI Column",
+            ylabel="ROI Row",
+        )
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
+        plt.colorbar(im, ax=ax)
+        # ax.margins(0)
         return ax
 
     def describe(self):
@@ -494,41 +560,12 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             "subtitle": self.start_time.isot,
             "tables": self.describe(),
             "star_field": lambda ax=None: self.plot_data(ax=ax),
-            "astrometry": lambda ax=None: self.plot_noise_psd(ax=ax),
+            "astrometry": lambda ax=None: self.plot_noise_spectrogram(ax=ax),
             "bad_pixels": lambda ax=None: self.plot_bad_pixels(ax=ax),
             "background_rms": lambda ax=None: self.plot_background_rms(ax=ax),
             "ramp_linearity": lambda ax=None: self.plot_ramp_linearity(ax=ax),
             "thermal_channel": lambda ax=None: self.plot_tcldtip1(ax=ax),
         }
-
-    def plot_data(self, ax=None, **kwargs):
-        called_from_report = ax is not None
-        if ax is None:
-            _, ax = plt.subplots()
-        
-        use_log = kwargs.pop("log", True)
-        if use_log:
-            d = np.median(np.log(self.integrations), axis=0)
-            max_add = 0.3
-        else:
-            d = np.median(self.integrations, axis=0)
-            max_add = 100.0
-        k = d != 0
-        vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1.0))
-        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1.0) + max_add) 
-        im = ax.pcolormesh(
-            self.column, self.row, d, vmin=vmin, vmax=vmax, **kwargs
-        )
-        ax.set(
-            aspect="equal",
-            xlabel="ROI Column",
-            ylabel="ROI Row",
-        )
-        if not called_from_report:
-            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
-        plt.colorbar(im, ax=ax)
-        # ax.margins(0)
-        return ax
 
 
 @register_hdulist(
