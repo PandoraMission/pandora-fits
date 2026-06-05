@@ -221,6 +221,46 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         )
         return et, ra, dec, rot
 
+    @property
+    def hot_pixels(self):
+        # Count pixels per coadded frame that exceed median + 5 × σ_MAD.
+        #
+        # MAD (Median Absolute Deviation) scaled by 1.4826 gives a Gaussian-
+        # equivalent σ that is robust to the outliers being detected:
+        # a handful of hot or cosmic-ray pixels inflates the standard deviation
+        # dramatically but moves the median by less than one count, so the
+        # threshold stays anchored to the bulk of the pixel distribution
+        # (Rousseeuw & Croux 1993).  5 σ_MAD gives a false-alarm rate of
+        # ~6 × 10⁻⁷ per pixel per frame for Gaussian noise — aggressive enough
+        # to catch real defects while avoiding flagging faint stars.
+        #
+        # Border pixels (structural zeros between sub-frame panels) are excluded
+        # via border_mask so they do not bias the median or inflate the count.
+        science = self["science"].data  # (nframes, panel_h, panel_w)
+        valid = ~self.border_mask.ravel()
+        pixels = science.reshape(self.nframes, -1).astype(float)[:, valid]
+        med = np.median(pixels, axis=1, keepdims=True)
+        sigma_mad = 1.4826 * np.median(np.abs(pixels - med), axis=1, keepdims=True)
+        counts = (pixels > med + 5.0 * sigma_mad).sum(axis=1)
+        return self.time, counts
+
+    @property
+    def dead_pixels(self):
+        # Count pixels reading zero DN per coadded frame within valid ROI regions.
+        #
+        # A pixel that accumulates zero counts across every sub-exposure in a coadd
+        # has failed to register charge, the standard indicator of a dead or
+        # permanently trapped pixel in a solid-state detector (Janesick 2001).
+        # Zero is the correct floor because coadding sums sub-exposures, so any
+        # genuine signal grows proportionally while a non-responsive pixel remains
+        # stuck at zero regardless of scene brightness. Inter-panel border pixels,
+        # which are also zero by construction, are excluded via border_mask to avoid
+        # conflating structural padding with detector defects.
+        science = self["science"].data  # (nframes, panel_h, panel_w)
+        valid = ~self.border_mask.ravel()
+        counts = (science.reshape(self.nframes, -1)[:, valid] == 0).sum(axis=1)
+        return self.time, counts
+
     def get_position_data(self):
         et, ra, dec, rot = self.astrometry
         dt = timedelta(seconds=self.frame_time.to(u.second).value)
@@ -328,6 +368,25 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         return ax
 
+    def plot_bad_pixels(self, ax=None, **kwargs):
+        called_from_report = ax is not None
+        if ax is None:
+            _, ax = plt.subplots()
+        t, hot = self.hot_pixels
+        _, dead = self.dead_pixels
+        t_min = (t.jd - self.start_time.jd) * 24 * 60
+        ax.plot(t_min, hot, label="Hot", **kwargs)
+        ax.plot(t_min, dead, label="Dead", **kwargs)
+        ax.legend()
+        ax.set(
+            yscale='log',
+            xlabel="Time from Start [min]",
+            ylabel="Pixel Count",
+        )
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
+        return ax
+
     def describe(self):
         keys = [
             "NUMSTARS",
@@ -357,6 +416,11 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
                     pass
             rows.append([key, value, comment])
 
+        _, hot = self.hot_pixels
+        _, dead = self.dead_pixels
+        rows.append(["HOT_MED", int(np.median(hot)), "Median hot pixels per frame"])
+        rows.append(["DEAD_MED", int(np.median(dead)), "Median dead pixels per frame"])
+
         return pd.DataFrame(
             rows, columns=["Key", "Value", "Comment"]
         ).set_index("Key")
@@ -368,6 +432,7 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             "tables": self.describe(),
             "star_field": lambda ax=None: self.plot_data(ax=ax),
             "astrometry": lambda ax=None: self.plot_astrometry(ax=ax),
+            "bad_pixels": lambda ax=None: self.plot_bad_pixels(ax=ax),
         }
 
     def get_earth_angle(self):

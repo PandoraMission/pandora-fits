@@ -59,6 +59,7 @@ class ReportMixins:
         ax_t2    = fig.add_subplot(gs[0:2, 3:6])
         ax_star  = fig.add_subplot(gs[2,   0:2])
         ax_astro = fig.add_subplot(gs[2,   2:4])
+        ax_bad   = fig.add_subplot(gs[2,   4:6])
 
         materials = self.get_report_materials()
 
@@ -87,7 +88,7 @@ class ReportMixins:
             ax_t1.axis("off")
             ax_t2.axis("off")
 
-        for key, ax in [("star_field", ax_star), ("astrometry", ax_astro)]:
+        for key, ax in [("star_field", ax_star), ("astrometry", ax_astro), ("bad_pixels", ax_bad)]:
             fn = materials.get(key)
             if callable(fn):
                 fn(ax=ax)
