@@ -1,6 +1,7 @@
 """Tools for generating fallback database of SOC targets"""
 
 # Standard library
+import os
 import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
