@@ -5,146 +5,110 @@ from __future__ import annotations
 
 # Third-party
 import matplotlib.pyplot as plt
-import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
+
+
+def _plot_table(ax, df):
+    """Render a compact DataFrame table sized exactly to content."""
+    ax.axis("off")
+    if df.empty:
+        return
+    df_str = df.astype(str)
+    table = ax.table(
+        cellText=df_str.values,
+        rowLabels=list(df_str.index),
+        colLabels=list(df_str.columns),
+        loc="upper left",
+        cellLoc="left",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    # Size every column to fit its widest cell (axes-fraction coords)
+    table.auto_set_column_width([-1, 0, 1])
+    for (row, col), cell in table.get_celld().items():
+        cell.PAD = 0.015
+        if row == 0 or col == -1:
+            cell.set_text_props(weight="bold")
+    table.scale(1.0, 1.1)
 
 
 class ReportMixins:
     def plot_description(self, ax=None):
+        """Standalone single-axes description table."""
         if ax is None:
             _, ax = plt.subplots()
-
-        ax.axis("off")
-        df = self.describe().astype(str)
-
-        # Draw table constrained to axes bbox
-        table = pd.plotting.table(
-            ax,
-            df,
-            loc="upper left",
-            cellLoc="left",
-            colLoc="left",
-            bbox=[0.1, 0.1, 0.95, 0.95],  # FORCE table into axes
-        )
-
-        table.auto_set_font_size(False)
-        table.set_fontsize(10)
-
-        # Column width control (relative to axes)
-        widths = {
-            -1: 0.18,  # index
-            0: 0.22,  # key
-            1: 0.60,  # value / comment
-        }
-
-        for (row, col), cell in table.get_celld().items():
-            if col in widths:
-                cell.set_width(widths[col])
-            cell.PAD = 0.02
-
-            # Bold header + index
-            if row == 0 or col == -1:
-                cell.set_text_props(weight="bold")
-
-        # Final vertical compaction
-        table.scale(1.0, 0.9)
-
+        _plot_table(ax, self.describe())
         return ax
 
-    def _build_report_figure_letter_3x2(self, *, dpi: int = 150):
+    def _build_report_figure(self, *, dpi: int = 150):
         """
-        Build a SINGLE letter-size figure laid out as a 3x2 grid.
-        Materials are drawn into provided axes (preferred). If a material
-        returns an Axes from its own figure, we embed that figure as an image.
+        5-row x 6-col GridSpec report. figsize (12, 10) gives equal 2-inch squares.
+
+        Layout
+        ------
+        rows 0-1, cols 0-2  description table (first half of rows)
+        rows 0-1, cols 3-5  description table (overflow)
+        row  2,   cols 0-1  star field image
+        row  2,   cols 2-3  position - mean-position time series
+        remainder           blank
         """
-        materials = list(self.get_report_materials())
+        fig = plt.figure(figsize=(12, 10), dpi=dpi, constrained_layout=True)
+        gs = fig.add_gridspec(5, 6)
 
-        # Letter size: 8.5 x 11 inches
-        fig, axes = plt.subplots(
-            nrows=2,
-            ncols=3,
-            figsize=(11, 8.5),  # LETTER LANDSCAPE
-            constrained_layout=True,
-            dpi=dpi,
-        )
-        axes = axes.ravel()
+        ax_t1    = fig.add_subplot(gs[0:2, 0:3])
+        ax_t2    = fig.add_subplot(gs[0:2, 3:6])
+        ax_star  = fig.add_subplot(gs[2,   0:2])
+        ax_astro = fig.add_subplot(gs[2,   2:4])
 
-        def _embed_axes_or_figure(target_ax, obj):
-            """Render an existing Axes/Figure onto target_ax as an image."""
-            target_ax.axis("off")
-            if isinstance(obj, plt.Axes):
-                src_fig = obj.figure
-            elif isinstance(obj, plt.Figure):
-                src_fig = obj
+        materials = self.get_report_materials()
+
+        title = materials.get("title", "")
+        subtitle = materials.get("subtitle", "")
+        if title:
+            # Shrink the gridspec rect to leave a strip at the top for the title
+            fig.get_layout_engine().set(rect=[0, 0, 1, 0.93])
+            x0, y = 0.04, 0.975
+            title_fs = 16
+            title_use = ""
+            if title != "":
+                title_use += title
+            if subtitle != "":
+                # Just put the subtitle on the same line.
+                title_use += f" :: {subtitle}"
+            fig.text(x0, y, title_use, ha="left", va="top",
+                     fontsize=title_fs, fontweight="bold")
+
+        df = materials.get("tables")
+        if df is not None and not df.empty:
+            mid = (len(df) + 1) // 2
+            _plot_table(ax_t1, df.iloc[:mid])
+            _plot_table(ax_t2, df.iloc[mid:])
+        else:
+            ax_t1.axis("off")
+            ax_t2.axis("off")
+
+        for key, ax in [("star_field", ax_star), ("astrometry", ax_astro)]:
+            fn = materials.get(key)
+            if callable(fn):
+                fn(ax=ax)
             else:
-                raise TypeError(f"Expected Axes/Figure, got {type(obj)!r}")
-
-            # draw + pull RGBA buffer (no disk)
-            src_fig.canvas.draw()
-            w, h = src_fig.canvas.get_width_height()
-            # Third-party
-            import numpy as np
-
-            rgba = np.frombuffer(
-                src_fig.canvas.buffer_rgba(), dtype=np.uint8
-            ).reshape(h, w, 4)
-            target_ax.imshow(rgba)
-
-        # Fill grid left-to-right, top-to-bottom
-        for i, ax in enumerate(axes):
-            if i >= len(materials):
                 ax.axis("off")
-                continue
-            if materials[i] is None:
-                ax.axis("off")
-                continue
-
-            item = materials[i]
-
-            # Preferred path: if item is callable that can draw into ax
-            if callable(item):
-                try:
-                    out = item(ax=ax)
-                except TypeError:
-                    out = item()
-                if out is None:
-                    continue
-                item = out
-
-            # If item is Axes/Figure made elsewhere, embed it
-            if isinstance(item, (plt.Axes, plt.Figure)):
-                # If it's an Axes on THIS fig already, nothing to do
-                if isinstance(item, plt.Axes) and item.figure is fig:
-                    continue
-                _embed_axes_or_figure(ax, item)
-                continue
-
-            # If it's something else, user should convert it to a plot method
-            raise TypeError(
-                f"Unsupported report material type: {type(item)!r}"
-            )
 
         return fig
 
     def make_report(self, *, force: bool = False):
-        """
-        Create and cache a single-page report figure.
-        """
+        """Create and cache the report figure."""
         if not force and getattr(self, "_report_fig", None) is not None:
             return self._report_fig
-        self._report_fig = self._build_report_figure_letter_3x2()
+        self._report_fig = self._build_report_figure()
         return self._report_fig
 
     def get_report(self, *, force: bool = False):
-        """
-        Show the single-page report in an interactive session (e.g., Jupyter).
-        """
+        """Show the report in an interactive session (e.g. Jupyter)."""
         return self.make_report(force=force)
 
     def save_report(self, path: str, *, force: bool = False):
-        """
-        Save the single-page report to a PDF.
-        """
+        """Save the report to a PDF."""
         fig = self.make_report(force=force)
         with PdfPages(path) as pdf:
             pdf.savefig(fig)
