@@ -133,8 +133,8 @@ def get_nirda_integrations(hdr, science):
     detector reset cycle.
     """
     fpi = get_nirda_frames_per_integration(hdr)
-    n_int = hdr["INTEGRTS"]
-    return science.reshape(n_int, fpi, science.shape[1], science.shape[2]).sum(axis=1)
+    n_int = science.shape[0] // fpi  # use actual frame count; handles cut-short observations
+    return science[: n_int * fpi].reshape(n_int, fpi, science.shape[1], science.shape[2]).sum(axis=1)
 
 
 @register_hdulist(
@@ -173,9 +173,10 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
 
     @property
     def integration_times(self):
-        """Start time of each integration as an astropy Time array of length INTEGRTS."""
+        """Start time of each integration; length matches actual recorded frames."""
         fpi = self._frames_per_integration
-        return self.start_time + np.arange(self[0].header["INTEGRTS"]) * fpi * self.frame_time
+        n_int = self["science"].data.shape[0] // fpi
+        return self.start_time + np.arange(n_int) * fpi * self.frame_time
 
     @property
     def hot_pixels(self):
@@ -201,8 +202,8 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         """Measure deviation from a linear ramp within each integration.
 
         For a well-behaved detector the signal accumulates linearly with group
-        number.  A straight line is fitted to the group values per pixel via
-        vectorised OLS, and the RMS of the residuals is computed.  The median
+        number. A straight line is fitted to the group values per pixel via
+        vectorised OLS, and the RMS of the residuals is computed. The median
         across all pixels gives one scalar per integration.
 
         Elevated values indicate saturation, persistence, or reset anomalies.
@@ -214,10 +215,10 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
         """
         science = self["science"].data.astype(float)  # (nframes, roi_y, roi_x)
         fpi = self._frames_per_integration
-        n_int = self[0].header["INTEGRTS"]
+        n_int = science.shape[0] // fpi  # actual complete integrations recorded
 
         # Reshape to (n_int, fpi, roi_y, roi_x) so axis-1 is the within-ramp axis
-        ramp = science.reshape(n_int, fpi, science.shape[1], science.shape[2])
+        ramp = science[: n_int * fpi].reshape(n_int, fpi, science.shape[1], science.shape[2])
 
         # Vectorised OLS: fit y = a + b*g for g in [0, fpi)
         g = np.arange(fpi, dtype=float)
