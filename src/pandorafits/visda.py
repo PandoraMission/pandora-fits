@@ -189,7 +189,6 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         im = ax.pcolormesh(d, vmin=vmin, vmax=vmax, **kwargs)
         ax.set(
             aspect="equal",
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
             xlabel="Panel Column",
             ylabel="Panel Row",
         )
@@ -325,7 +324,6 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         )
         ax.legend()
         ax.set(
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
             xlabel="Time in Exposure [s]",
             ylabel="Position - Mean Position [arcsecond]",
         )
@@ -353,12 +351,16 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         return df
 
     def get_report_materials(self):
-        return [
+        report_materials = dict()
+        report_materials['title'] = self[0].header.get("targ_id", "UNKNOWN")
+        report_materials['subtitle'] = self.start_time.isot
+        report_materials['report_metrics'] = self.describe()
+        report_materials['report_plots'] = [
             lambda ax=None: self.plot_data(ax=ax),
-            lambda ax=None: self.plot_astrometry(ax=ax),
-            None,
-            lambda ax=None: self.plot_description(ax=ax),
+            lambda ax=None: self.plot_astrometry(ax=ax)
         ]
+
+        return report_materials
 
     def get_earth_angle(self):
         return ps.get_angle_to_body(
@@ -516,7 +518,6 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
         im = ax.pcolormesh(d, vmin=vmin, vmax=vmax, **kwargs)
         ax.set(
             aspect="equal",
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
             xlabel="Column",
             ylabel="Row",
         )
@@ -537,12 +538,15 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
         return df
 
     def get_report_materials(self):
-        return [
-            lambda ax=None: self.plot_data(ax=ax),
-            None,
-            None,
-            lambda ax=None: self.plot_description(ax=ax),
+        report_materials = dict()
+        report_materials['title'] = self[0].header.get("targ_id", "UNKNOWN")
+        report_materials['subtitle'] = self.start_time.isot
+        report_materials['report_metrics'] = self.describe()
+        report_materials['report_plots'] = [
+            lambda ax=None: self.plot_data(ax=ax)
         ]
+
+        return report_materials
 
     def __to_l1__(self):
         return VISDAFFILevel1HDUList(self)
