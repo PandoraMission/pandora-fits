@@ -2,6 +2,7 @@
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from astropy.coordinates import SkyCoord
 
 from . import FORMATSDIR, NIRDAReference, logger
@@ -122,10 +123,50 @@ class NIRDALevel0HDUList(PandoraHDUList, ReportMixins):
         # ax.margins(0)
         return ax
 
+    def describe(self):
+        keys = [
+            "TARG_ID",
+            "TARG_RA",
+            "TARG_DEC",
+            "EXPOSRES",
+            "RESETS1",
+            "RESETS2",
+            "DROPS1",
+            "DROPS2",
+            "DROPS3",
+            "READS",
+            "GRPS",
+            "INTEGRTS",
+            "ROISIZEX",
+            "ROISIZEY",
+            "TCLDTIP1"
+        ]
+
+        hdr = self[0].header
+        rows = []
+        for key in keys:
+            try:
+                value = hdr[key]
+                comment = hdr.comments[key]
+            except (KeyError, IndexError):
+                value, comment = "N/A", ""
+            if key in ("TARG_RA", "TARG_DEC", "TCLDTIP1"):
+                try:
+                    value = round(float(value), 4)
+                except (TypeError, ValueError):
+                    pass
+            rows.append([key, value, comment])
+
+        df = pd.DataFrame(
+            rows, columns=["Key", "Value", "Comment"]
+        ).set_index("Key")
+        return df
+
     def get_report_materials(self):
         report_materials = dict()
         report_materials['title'] = self[0].header.get("targ_id", "UNKNOWN")
         report_materials['subtitle'] = self.start_time.isot
+        report_materials['report_metrics'] = self.describe()
         report_materials['report_plots'] = [
             lambda ax=None: self.plot_data(ax=ax)
         ]
