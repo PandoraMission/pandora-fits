@@ -7,6 +7,7 @@ from astropy.coordinates import SkyCoord
 from . import FORMATSDIR, NIRDAReference, logger
 from .fits import PandoraHDUList
 from .io import register_hdulist
+from .report import ReportMixins
 from .scene import get_NIRDA_scene
 from .utils import convert_time
 
@@ -89,7 +90,7 @@ def get_nirda_exposure_times(hdr):
         )
     )
 )
-class NIRDALevel0HDUList(PandoraHDUList):
+class NIRDALevel0HDUList(PandoraHDUList, ReportMixins):
     filename = FORMATSDIR + "nirda/level0_nirda.xlsx"
     reference = NIRDAReference
     level = 0
@@ -99,6 +100,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
         return NIRDALevel1HDUList(self)
 
     def plot_data(self, ax=None, **kwargs):
+        ax_provided = ax is not None
         if ax is None:
             _, ax = plt.subplots()
         d = self["science"].data[0]
@@ -110,13 +112,25 @@ class NIRDALevel0HDUList(PandoraHDUList):
         )
         ax.set(
             aspect="equal",
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
             xlabel="ROI Column",
             ylabel="ROI Row",
         )
+        if not ax_provided:
+            # Don't add titles for figures made for fits reports.
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         plt.colorbar(im, ax=ax)
         # ax.margins(0)
         return ax
+
+    def get_report_materials(self):
+        report_materials = dict()
+        report_materials['title'] = self[0].header.get("targ_id", "UNKNOWN")
+        report_materials['subtitle'] = self.start_time.isot
+        report_materials['report_plots'] = [
+            lambda ax=None: self.plot_data(ax=ax)
+        ]
+
+        return report_materials
 
 
 @register_hdulist(
