@@ -114,10 +114,17 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
 
     def _validate_n_ext(self):
         """Validate that all the necessary extensions are present."""
-        k = np.in1d(
-            self.extension_names,
-            [hdu.header["EXTNAME"].lower() for hdu in self],
-        )
+        try:
+            k = np.in1d(
+                self.extension_names,
+                [hdu.header["EXTNAME"].lower() for hdu in self],
+            )
+        except AttributeError:
+            # Newer versions of numpy removed in1d. Keeping for backward compat.
+            k = np.isin(
+                self.extension_names,
+                [hdu.header["EXTNAME"].lower() for hdu in self],
+            )
         for name in self.extension_names[~k]:
             if not self.structure[
                 self.structure.Extension.str.lower() == name

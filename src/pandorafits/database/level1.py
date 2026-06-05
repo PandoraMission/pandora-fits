@@ -20,7 +20,7 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
     """Database for managing Level 1 files."""
 
     table_name = "pointings"
-    db_path = f"{LEVEL1_DIR}/level1.db"
+    db_path = os.path.join(LEVEL1_DIR, "level1.db")
     level = 1
     level_dir = LEVEL1_DIR
 
@@ -28,7 +28,9 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
 
     def __init__(self):
         super().__init__()
-        self.cur.execute(f"ATTACH DATABASE '{LEVEL0_DIR}/level0.db' AS level0")
+        self.cur.execute(
+            f"ATTACH DATABASE '{os.path.join(LEVEL0_DIR, 'level0.db')}' AS level0"
+        )
 
     def __repr__(self):
         return f"Pandora Level{self.level}DataBase"
@@ -94,7 +96,7 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
             nchunks=nchunks,
             chunk=chunk,
         )
-        return [f"{f[0]}/{f[1]}" for f in files]
+        return [os.path.join(f[0], f[1]) for f in files]
 
     def n_files_to_process(self, crsoftver=CRSOFTVER):
         return self.get_x_to_process(
@@ -112,7 +114,7 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         )
 
     def check_filename_in_database(self, filename, level=0):
-        fname = filename.split("/")[-1] if "/" in filename else filename
+        fname = os.path.basename(filename)
         self.cur.execute(
             f"SELECT pfsoftver FROM {f'level{self.level - 1}.' if level == 0 else ''}pointings WHERE filename=?",
             (fname,),
@@ -120,17 +122,14 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         return self.cur.fetchone() is not None
 
     def get_entry(self, filename):
-        fname = filename.split("/")[-1] if "/" in filename else filename
+        fname = os.path.basename(filename)
         self.cur.execute(
             f"SELECT * FROM level{self.level - 1}.pointings WHERE lvlfilename=?",
             (fname,),
         )
         row = self.cur.fetchone()
         output_filename = self.get_output_filename(row)
-        lvldir, lvlfilename = (
-            "/".join(output_filename.split("/")[:-1]),
-            output_filename.split("/")[-1],
-        )
+        lvldir, lvlfilename = os.path.split(output_filename)
         return (row[0], lvlfilename, row[2], lvldir, *row[4:])
 
     def get_output_filename(self, filename_or_row):
@@ -140,27 +139,31 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
             targ_id, targ_ra, targ_dec = row[21], row[22], row[23]
             fname = row[0]
         elif isinstance(filename_or_row, str):
-            # filename = filename_or_row
-            fname = (
-                filename_or_row.split("/")[-1]
-                if "/" in filename_or_row
-                else filename_or_row
-            )
+            fname = os.path.basename(filename_or_row)
             self.cur.execute(
                 f"SELECT filename, start, targ_id, targ_ra, targ_dec FROM level{self.level - 1}.pointings WHERE lvlfilename=?",
                 (fname,),
             )
             row = self.cur.fetchone()
+            if row is None:
+                return None
             t = Time(row[1], format="jd").to_datetime()
             targ_id, targ_ra, targ_dec = row[2:]
             fname = row[0]
-            if row is None:
-                return None
         elif filename_or_row is None:
             return None
-        fname_no_suffix = ".".join(fname.split(".")[:-1])
-        suffix = fname.split(".")[-1]
-        return f"{self.level_dir}/{t.year}/{t.month}/{t.day}/{get_dpc_hashkey(targ_id, targ_ra, targ_dec)}/{fname_no_suffix}_v{__version__.replace('.', '-')}_l{self.level}.{suffix}"
+        else:
+            return None
+
+        fname_no_suffix, suffix = os.path.splitext(fname)
+        return os.path.join(
+            self.level_dir,
+            str(t.year),
+            str(t.month),
+            str(t.day),
+            get_dpc_hashkey(targ_id, targ_ra, targ_dec),
+            f"{fname_no_suffix}_v{__version__.replace('.', '-')}_l{self.level}{suffix}",
+        )
 
     def _get_filemap(self):
         from ..nirda import NIRDALevel0HDUList
@@ -178,7 +181,7 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         logger.info(f"Processing {filename} to Level {self.level}.")
         logger.info("Ensuring file directory present.")
         path = self.get_output_filename(filename)
-        os.makedirs("/".join(path.split("/")[:-1]), exist_ok=True)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         filemap = self._get_filemap()
         for key, HDUList in filemap.items():
             if key in filename:
@@ -187,7 +190,7 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
                         **kwargs
                     )
                     hdulist.writeto(path, overwrite=True, checksum=True)
-        logger.info(f"Wrote {filename.split('/')[-1]} to {path}")
+        logger.info(f"Wrote {os.path.basename(filename)} to {path}")
         return self.get_entry(filename)
 
     def crawl_and_process(self, crsoftver=CRSOFTVER, nchunks=None, chunk=None):

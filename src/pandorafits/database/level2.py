@@ -1,3 +1,6 @@
+# Standard library
+import os
+
 # flake8: noqa W291
 """Tools for keeping a database of pandora files"""
 
@@ -9,13 +12,15 @@ class Level2DataBase(Level1DataBase):
     """Database for managing Level 2 files."""
 
     table_name = "pointings"
-    db_path = f"{LEVEL2_DIR}/level2.db"
+    db_path = os.path.join(LEVEL2_DIR, "level2.db")
     level = 2
     level_dir = LEVEL2_DIR
 
     def __init__(self):
         super().__init__()
-        self.cur.execute(f"ATTACH DATABASE '{LEVEL1_DIR}/level1.db' AS level1")
+        self.cur.execute(
+            f"ATTACH DATABASE '{os.path.join(LEVEL1_DIR, 'level1.db')}' AS level1"
+        )
 
     def _get_filemap(self):
         from ..nirda import NIRDALevel1HDUList

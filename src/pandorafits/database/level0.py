@@ -9,8 +9,12 @@ import warnings
 from datetime import timedelta
 from pathlib import Path
 
+try:
+    # Third-party
+    import fitsio
+except ImportError:  # pragma: no cover - exercised only when fitsio is absent
+    fitsio = None
 # Third-party
-import fitsio
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
@@ -27,6 +31,11 @@ from .targets import TargetDataBase
 
 
 def get_entry(filename, checksums=False):
+    if fitsio is None:
+        raise ModuleNotFoundError(
+            "fitsio is required for database file parsing but is not available on this platform."
+        )
+
     filesize = os.path.getsize(filename) / (1024 * 1024)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")  # capture all warnings
@@ -98,7 +107,8 @@ def get_entry(filename, checksums=False):
                 hdr["ROISTRTX"],
                 hdr["ROISTRTY"],
                 len(hdulist),
-                "ASTROMETRY" in np.asarray([hdu.get_extname() for hdu in hdulist]),
+                "ASTROMETRY"
+                in np.asarray([hdu.get_extname() for hdu in hdulist]),
                 hdr["TARG_ID"] if "TARG_ID" in hdr else None,
                 hdr["TARG_RA"] if "TARG_RA" in hdr else None,
                 hdr["TARG_DEC"] if "TARG_DEC" in hdr else None,
@@ -372,7 +382,9 @@ class Level0DataBase(DataBaseMixins):
     def _update_target_from_SOC(self):
         # This makes sure the database exists
         TargetDataBase()
-        self.cur.execute(f"ATTACH DATABASE '{LEVEL0_DIR}/targets.db' AS targets")
+        self.cur.execute(
+            f"ATTACH DATABASE '{LEVEL0_DIR}/targets.db' AS targets"
+        )
 
         # If there are nans in the targ_ra, targ_dec, fill them in with the most recent values from the SOC before the data.
         sql = """UPDATE pointings
@@ -382,18 +394,20 @@ class Level0DataBase(DataBaseMixins):
                     FROM targets e
                     WHERE e.targ_id = pointings.targ_id
                     AND e.created <= pointings.start
-                    AND e.targ_ra IS NOT NULL
+                    db_path = os.path.join(LEVEL0_DIR, "level0.db")
                     AND e.targ_ra = e.targ_ra
                     ORDER BY e.created DESC
                     LIMIT 1
                 ),
                 targ_dec = (
                     SELECT e.targ_dec
+                            basename = os.path.basename(filename)
+                            dirname = os.path.dirname(filename)
                     FROM targets e
-                    WHERE e.targ_id = pointings.targ_id
-                    AND e.created <= pointings.start
-                    AND e.targ_dec IS NOT NULL
-                    AND e.targ_dec = e.targ_dec
+                                basename,
+                                basename,
+                                dirname,
+                                dirname,
                     ORDER BY e.created DESC
                     LIMIT 1
                 )
@@ -430,10 +444,10 @@ class Level0DataBase(DataBaseMixins):
             targ_dec = (
                 SELECT t.targ_dec
                 FROM targets.targets t
-                WHERE t.targ_id = pointings.targ_id
+                            f"ATTACH DATABASE '{os.path.join(LEVEL0_DIR, 'targets.db')}' AS targets"
                 AND t.targ_dec IS NOT NULL
                 AND t.targ_dec = t.targ_dec
-                ORDER BY t.created ASC
+                            f"ATTACH DATABASE '{os.path.join(LEVEL0_DIR, 'astrometry.db')}' AS astrometry"
                 LIMIT 1
             )
             WHERE
@@ -547,7 +561,9 @@ class Level0DataBase(DataBaseMixins):
     def _update_pointing_from_payload(self):
         # This makes sure the database exists
         AstrometryDataBase()
-        self.cur.execute(f"ATTACH DATABASE '{LEVEL0_DIR}/astrometry.db' AS astrometry")
+        self.cur.execute(
+            f"ATTACH DATABASE '{LEVEL0_DIR}/astrometry.db' AS astrometry"
+        )
 
         # If there are nans in the targ_ra, targ_dec, fill them in with the most recent values from the SOC before the data.
         for attr in ["ra", "dec", "roll"]:

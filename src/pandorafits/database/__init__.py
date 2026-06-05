@@ -41,7 +41,7 @@ DPC_KEYS = {
 
 
 try:
-    import fitsio
+    import fitsio  # noqa
 except ImportError as exc:
     raise ImportError(
         "The database functionality requires the optional 'database' "
