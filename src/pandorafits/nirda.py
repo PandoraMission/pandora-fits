@@ -186,8 +186,8 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             _, ax = plt.subplots()
         d = np.median(self["science"].data, axis=0)
         k = d != 0
-        vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 50.0))
-        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 50.0) + 100)
+        vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1.0))
+        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1.0) + 100)
         im = ax.pcolormesh(
             self.column, self.row, d, vmin=vmin, vmax=vmax, **kwargs
         )

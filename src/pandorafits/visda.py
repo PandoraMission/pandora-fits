@@ -183,7 +183,7 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         called_from_report = ax is not None
         if ax is None:
             _, ax = plt.subplots()
-        d = self["science"].data[0]
+        d = np.median(self["science"].data, axis=0)
         k = d != 0
         vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1))
         vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1) + 100)
