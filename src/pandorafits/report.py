@@ -33,23 +33,29 @@ def plot_table(ax, df):
 
 
 class ReportMixins:
-    
+
     def get_report_materials(self, *args, **kwargs):
-        """Details that make up a report. This is overridden by sub classes. """
+        """Details that make up a report. This is overridden by sub classes."""
         return dict()
 
-    def build_report_figure(self, *, dpi: int = 150, wspace: float = 1.3, hspace: float = 0.2):
+    def build_report_figure(
+        self, *, dpi: int = 150, wspace: float = 1.3, hspace: float = 0.2
+    ):
         """
         6-row x 6-col GridSpec report. figsize (12, 10) gives equal 2-inch squares.
         """
         fig = plt.figure(figsize=(12, 10), dpi=dpi, constrained_layout=True)
-        gs  = fig.add_gridspec(6, 6, wspace=wspace, hspace=hspace)
+        gs = fig.add_gridspec(6, 6, wspace=wspace, hspace=hspace)
 
         # Create figure axes. Could do this programmatically but want finer control because they
         # are not all the same size/shape.
         report_plot_axes = list()
-        report_plot_axes.append(fig.add_subplot(gs[0:2, 0:3]))  # Index 0 is reserved for table-based metrics.
-        report_plot_axes.append(fig.add_subplot(gs[0:2, 3:6]))  # Index 1 is reserved for table-based metrics.
+        report_plot_axes.append(
+            fig.add_subplot(gs[0:2, 0:3])
+        )  # Index 0 is reserved for table-based metrics.
+        report_plot_axes.append(
+            fig.add_subplot(gs[0:2, 3:6])
+        )  # Index 1 is reserved for table-based metrics.
         report_plot_axes.append(fig.add_subplot(gs[2:4, 0:2]))
         report_plot_axes.append(fig.add_subplot(gs[2:4, 2:4]))
         report_plot_axes.append(fig.add_subplot(gs[2:4, 4:6]))
@@ -81,8 +87,15 @@ class ReportMixins:
             if subtitle != "":
                 # Just put the subtitle on the same line.
                 title_use += f" :: {subtitle}"
-            fig.text(x0, y, title_use, ha="left", va="top",
-                     fontsize=title_fs, fontweight="bold")
+            fig.text(
+                x0,
+                y,
+                title_use,
+                ha="left",
+                va="top",
+                fontsize=title_fs,
+                fontweight="bold",
+            )
 
         # Metrics about the observation as a whole.
         report_metrics = materials.get("report_metrics", None)
@@ -97,7 +110,7 @@ class ReportMixins:
         # Plots that are generally timeseries of one or metrics
         report_plot_funcs = materials.get("report_plots", [])
         for fig_index, ax in enumerate(report_plot_axes[2:]):
-            
+
             # Plot to this axis if there is a function to plot at this location.
             if fig_index < len(report_plot_funcs):
                 plot_func = report_plot_funcs[fig_index]

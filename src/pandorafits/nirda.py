@@ -139,7 +139,7 @@ class NIRDALevel0HDUList(PandoraHDUList, ReportMixins):
             "INTEGRTS",
             "ROISIZEX",
             "ROISIZEY",
-            "TCLDTIP1"
+            "TCLDTIP1",
         ]
 
         hdr = self[0].header
@@ -157,17 +157,17 @@ class NIRDALevel0HDUList(PandoraHDUList, ReportMixins):
                     pass
             rows.append([key, value, comment])
 
-        df = pd.DataFrame(
-            rows, columns=["Key", "Value", "Comment"]
-        ).set_index("Key")
+        df = pd.DataFrame(rows, columns=["Key", "Value", "Comment"]).set_index(
+            "Key"
+        )
         return df
 
     def get_report_materials(self):
         report_materials = dict()
-        report_materials['title'] = self[0].header.get("targ_id", "UNKNOWN")
-        report_materials['subtitle'] = self.start_time.isot
-        report_materials['report_metrics'] = self.describe()
-        report_materials['report_plots'] = [
+        report_materials["title"] = self[0].header.get("targ_id", "UNKNOWN")
+        report_materials["subtitle"] = self.start_time.isot
+        report_materials["report_metrics"] = self.describe()
+        report_materials["report_plots"] = [
             lambda ax=None: self.plot_data(ax=ax)
         ]
 
