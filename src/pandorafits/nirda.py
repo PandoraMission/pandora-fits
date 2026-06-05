@@ -100,6 +100,42 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
     def __to_l1__(self):
         return NIRDALevel1HDUList(self)
 
+    @property
+    def hot_pixels(self):
+        # Count pixels per frame exceeding median + 5 x sigma_MAD across the
+        # full frame.  MAD x 1.4826 gives a Gaussian-equivalent sigma robust to
+        # the outliers being detected (hot pixels barely move the median).
+        science = self["science"].data.astype(float)  # (nframes, roi_y, roi_x)
+        pixels = science.reshape(self.nframes, -1)
+        med = np.median(pixels, axis=1, keepdims=True)
+        sigma_mad = 1.4826 * np.median(np.abs(pixels - med), axis=1, keepdims=True)
+        counts = (pixels > med + 5.0 * sigma_mad).sum(axis=1)
+        return self.time, counts
+
+    @property
+    def dead_pixels(self):
+        science = self["science"].data  # (nframes, roi_y, roi_x)
+        counts = (science == 0).sum(axis=(1, 2))
+        return self.time, counts
+
+    def plot_bad_pixels(self, ax=None, **kwargs):
+        called_from_report = ax is not None
+        if ax is None:
+            _, ax = plt.subplots()
+        t, hot = self.hot_pixels
+        _, dead = self.dead_pixels
+        t_min = (t.jd - self.start_time.jd) * 24 * 60
+        ax.plot(t_min, hot, label="Hot", **kwargs)
+        ax.plot(t_min, dead, label="Dead", **kwargs)
+        ax.legend()
+        ax.set(
+            yscale='log',
+            xlabel="Time from Start [min]",
+            ylabel="Pixel Count")
+        if not called_from_report:
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
+        return ax
+
     def describe(self):
         keys = [
             "TARG_ID",
@@ -126,6 +162,10 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
                 except (TypeError, ValueError):
                     pass
             rows.append([key, value, comment])
+        _, hot = self.hot_pixels
+        _, dead = self.dead_pixels
+        rows.append(["HOT_MED", int(np.median(hot)), "Median hot pixels per frame"])
+        rows.append(["DEAD_MED", int(np.median(dead)), "Median dead pixels per frame"])
         return pd.DataFrame(
             rows, columns=["Key", "Value", "Comment"]
         ).set_index("Key")
@@ -137,16 +177,17 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             "tables": self.describe(),
             "star_field": lambda ax=None: self.plot_data(ax=ax),
             "astrometry": None,
+            "bad_pixels": lambda ax=None: self.plot_bad_pixels(ax=ax),
         }
 
     def plot_data(self, ax=None, **kwargs):
         called_from_report = ax is not None
         if ax is None:
             _, ax = plt.subplots()
-        d = self["science"].data[0]
+        d = np.median(self["science"].data, axis=0)
         k = d != 0
-        vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 1))
-        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 1) + 100)
+        vmin = kwargs.pop("vmin", np.nanpercentile(d[k], 50.0))
+        vmax = kwargs.pop("vmax", np.nanpercentile(d[k], 50.0) + 100)
         im = ax.pcolormesh(
             self.column, self.row, d, vmin=vmin, vmax=vmax, **kwargs
         )

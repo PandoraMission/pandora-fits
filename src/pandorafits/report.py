@@ -55,11 +55,11 @@ class ReportMixins:
         fig = plt.figure(figsize=(12, 10), dpi=dpi, constrained_layout=True)
         gs = fig.add_gridspec(5, 6)
 
-        ax_t1    = fig.add_subplot(gs[0:2, 0:3])
-        ax_t2    = fig.add_subplot(gs[0:2, 3:6])
-        ax_star  = fig.add_subplot(gs[2,   0:2])
-        ax_astro = fig.add_subplot(gs[2,   2:4])
-        ax_bad   = fig.add_subplot(gs[2,   4:6])
+        ax_t1    = fig.add_subplot(gs[0:1, 0:3])
+        ax_t2    = fig.add_subplot(gs[0:1, 3:6])
+        ax_star  = fig.add_subplot(gs[1:3,   0:2])
+        ax_astro = fig.add_subplot(gs[1:3,   2:4])
+        ax_bad   = fig.add_subplot(gs[1:3,   4:6])
 
         materials = self.get_report_materials()
 
