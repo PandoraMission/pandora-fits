@@ -40,6 +40,17 @@ DPC_KEYS = {
 }
 
 
+try:
+    import fitsio  # noqa
+except ImportError as exc:
+    raise ImportError(
+        "The database functionality requires the optional 'database' "
+        "dependencies. Install them with:\n\n"
+        "    pip install 'pandorafits[database]'\n\n"
+        "or if you have your local install managed with poetry\n\n"
+        "   poetry install --extras database"
+    ) from exc
+
 from ..roll import get_roll  # noqa
 from .targets import TargetDataBase  # noqa
 from .astrometry import AstrometryDataBase  # noqa

@@ -5,6 +5,7 @@ import os  # noqa
 from pathlib import Path
 from importlib.metadata import PackageNotFoundError, version  # noqa
 import pandoraaperture as pa  # noqa
+from typing import Union
 
 # Third-party
 import numpy as np  # noqa: E402
@@ -71,11 +72,11 @@ class PandoraLogger(logging.Logger):
         self.addHandler(file_handler)
 
 
-def _safe_makedirs(path: str | os.PathLike[str]) -> None:
+def _safe_makedirs(path: Union[str, os.PathLike[str]]) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def _safe_chmod(path: str | os.PathLike[str], mode: int) -> None:
+def _safe_chmod(path: Union[str, os.PathLike[str]], mode: int) -> None:
     try:
         os.chmod(path, mode)
     except (AttributeError, NotImplementedError, OSError):
@@ -188,10 +189,7 @@ LEVEL1_DIR = config["SETTINGS"]["level1_dir"]
 LEVEL2_DIR = config["SETTINGS"]["level2_dir"]
 LEVEL3_DIR = config["SETTINGS"]["level3_dir"]
 
-[
-    _safe_makedirs(dir)
-    for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]
-]
+[_safe_makedirs(dir) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
 [_safe_chmod(dir, 0o750) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
 
 

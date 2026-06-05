@@ -1,8 +1,10 @@
 # flake8: noqa W291
 """Tools for keeping a database of pandora files"""
 
-# Third-party
+# Standard library
 import os
+
+# Third-party
 from astropy.time import Time
 
 from .. import LEVEL2_DIR, LEVEL3_DIR, __version__

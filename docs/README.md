@@ -88,3 +88,11 @@ You can install with a git clone, or via PyPI using the command below. Make sure
 ```
 pip install pandorafits --upgrade
 ```
+
+If you need to run the pipeline and use the databasing features you will need to add the optional extras. 
+
+```
+pip install "pandorafits[database]" --upgrade
+```
+
+Note if you're working on a windows machine this install might be harder and you should open an issue if you encounter any problems.

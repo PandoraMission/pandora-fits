@@ -337,21 +337,21 @@ def get_status():
     return status
 
 
-def get_level_database(level):
+def get_level_database(level, **kwargs):
     with globals()[f"Level{level}DataBase"]() as self:
-        df = self.to_pandas()
+        df = self.to_pandas(**kwargs)
     return df
 
 
-def get_astrometry_database():
+def get_astrometry_database(**kwargs):
     with AstrometryDataBase() as self:
-        df = self.to_pandas()
+        df = self.to_pandas(**kwargs)
     return df
 
 
-def get_target_database():
+def get_target_database(**kwargs):
     with TargetDataBase() as self:
-        df = self.to_pandas()
+        df = self.to_pandas(**kwargs)
     return df
 
 

@@ -9,11 +9,12 @@ import warnings
 from datetime import timedelta
 from pathlib import Path
 
-# Third-party
 try:
+    # Third-party
     import fitsio
 except ImportError:  # pragma: no cover - exercised only when fitsio is absent
     fitsio = None
+# Third-party
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
@@ -62,19 +63,23 @@ def get_entry(filename, checksums=False):
             if "FRMTIME" in hdr:
                 frame_time = hdr["FRMTIME"] / 1000
             elif "EXPTIMEU" in hdr:
-                if "NAXIS3" in hdr1:
-                    frame_time = (
-                        hdr["EXPTIMEU"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
-                    ) / 1.0e6
-                else:
-                    frame_time = (hdr["EXPTIMEU"] * hdr["FRMSCLCT"]) / 1.0e6
+                frame_time = (hdr["EXPTIMEU"] * hdr["FRMPCOAD"]) / 1.0e6
             elif "EXPTIME" in hdr:
-                if "NAXIS3" in hdr1:
-                    frame_time = (
-                        hdr["EXPTIME"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
-                    ) / 1.0e6
-                else:
-                    frame_time = (hdr["EXPTIME"] * hdr["FRMSCLCT"]) / 1.0e6
+                frame_time = (hdr["EXPTIME"] * hdr["FRMPCOAD"]) / 1.0e6
+            # elif "EXPTIMEU" in hdr:
+            #     if "NAXIS3" in hdr1:
+            #         frame_time = (
+            #             hdr["EXPTIMEU"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
+            #         ) / 1.0e6
+            #     else:
+            #         frame_time = (hdr["EXPTIMEU"] * hdr["FRMSCLCT"]) / 1.0e6
+            # elif "EXPTIME" in hdr:
+            #     if "NAXIS3" in hdr1:
+            #         frame_time = (
+            #             hdr["EXPTIME"] * hdr["FRMSCLCT"] / hdr1["NAXIS3"]
+            #         ) / 1.0e6
+            #     else:
+            #         frame_time = (hdr["EXPTIME"] * hdr["FRMSCLCT"]) / 1.0e6
 
             nframes = hdr1[f"NAXIS{hdr1['NAXIS']}"]
             exptime = nframes * frame_time

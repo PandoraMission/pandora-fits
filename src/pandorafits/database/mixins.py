@@ -40,12 +40,16 @@ class DataBaseMixins:
         CREATE TABLE IF NOT EXISTS {self.table_name} ({key_string})
         """
         )
-
         key_string = ", ".join(
             [f"{key}" for key, item in self._sql_key_dict.items()]
         )
         value_string = ", ".join(["?"] * len(self._sql_key_dict))
         self.update_str = f"""INSERT INTO {self.table_name} ({key_string}) VALUES ({value_string})"""
+        if "filename" in self._sql_key_dict.keys():
+            self.cur.execute(
+                f"""CREATE INDEX IF NOT EXISTS  idx_filename ON {self.table_name}(filename);"""
+            )
+
         self.conn.commit()
 
         try:

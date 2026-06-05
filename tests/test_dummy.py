@@ -1,7 +1,8 @@
-# First-party/Local
+# Standard library
 import os
 from pathlib import Path
 
+# First-party/Local
 from pandorafits import PACKAGEDIR, logger
 from pandorafits.nirda import NIRDALevel0HDUList
 from pandorafits.visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
