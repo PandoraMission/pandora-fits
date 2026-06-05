@@ -436,7 +436,8 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             "GRPS",
             "INTEGRTS",
             "ROISIZEX",
-            "ROISIZEY"
+            "ROISIZEY",
+            "TCLDTIP1"
         ]
         hdr = self[0].header
         rows = []
@@ -497,6 +498,7 @@ class NIRDALevel0HDUList(ReportMixins, PandoraHDUList):
             "bad_pixels": lambda ax=None: self.plot_bad_pixels(ax=ax),
             "background_rms": lambda ax=None: self.plot_background_rms(ax=ax),
             "ramp_linearity": lambda ax=None: self.plot_ramp_linearity(ax=ax),
+            "thermal_channel": lambda ax=None: self.plot_tcldtip1(ax=ax),
         }
 
     def plot_data(self, ax=None, **kwargs):

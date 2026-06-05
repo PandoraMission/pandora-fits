@@ -60,7 +60,7 @@ class ReportMixins:
         ax_star  = fig.add_subplot(gs[2:4, 0:2])
         ax_astro = fig.add_subplot(gs[2:4, 2:4])
         ax_bad   = fig.add_subplot(gs[2:4, 4:6])
-        ax_ramp  = fig.add_subplot(gs[4:6, 0:4])
+        ax_ramp  = fig.add_subplot(gs[4:6, 0:2])
         ax_bgrms = fig.add_subplot(gs[4:6, 4:6])
 
         materials = self.get_report_materials()
