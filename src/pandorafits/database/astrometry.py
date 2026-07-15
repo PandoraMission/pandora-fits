@@ -220,6 +220,8 @@ class AstrometryDataBase(DataBaseMixins):
                         str(path)
                         for path in Path(root).rglob(
                             f"*{match_str}*{image_type}*.fits"
+                            if match_str != ""
+                            else f"*{image_type}*.fits"
                         )
                         if not self.check_filename_in_database(str(path))
                     ]

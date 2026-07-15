@@ -30,6 +30,7 @@ __all__ = [
     "delete_astrometrydatabase",
     "update_astrometrydatabase",
     "update_level0database",
+    "update_level1database",
     "delete_level0database",
     "delete_level1database",
     "delete_level2database",
@@ -108,6 +109,14 @@ def update_level0database(match_str="") -> None:
     """
     with Level0DataBase() as db:
         db.crawl_and_add(match_str=match_str)
+
+
+def update_level1database() -> None:
+    """
+    Creates and updates to the SQLite database file.
+    """
+    with Level1DataBase() as db:
+        db.crawl_and_process()
 
 
 def delete_level0database() -> None:

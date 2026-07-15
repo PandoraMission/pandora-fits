@@ -61,7 +61,7 @@ def get_entry(filename, checksums=False):
             hdr = hdulist[0].read_header()
             time = convert_time(hdr["CORSTIME"], hdr["FINETIME"])
             hdr1 = hdulist[1].read_header()
-            frame_time = get_exposure_time(hdr)
+            exptime = get_exposure_time(hdr).value
 
             # elif "EXPTIMEU" in hdr:
             #     if "NAXIS3" in hdr1:
@@ -78,8 +78,8 @@ def get_entry(filename, checksums=False):
             #     else:
             #         frame_time = (hdr["EXPTIME"] * hdr["FRMSCLCT"]) / 1.0e6
 
-            nframes = hdr1[f"NAXIS{hdr1['NAXIS']}"]
-            exptime = nframes * frame_time
+            # nframes = hdr1[f"NAXIS{hdr1['NAXIS']}"]
+            # exptime = nframes * frame_time
             for key in ["FINETIME", "CORSTIME", "INSTRMNT"]:
                 if key not in hdr:
                     return
@@ -252,6 +252,8 @@ class Level0DataBase(DataBaseMixins):
                 str(path)
                 for path in Path(root).rglob(
                     f"*{match_str}*{image_type}*.fits"
+                    if match_str != ""
+                    else f"*{image_type}*.fits"
                 )
                 if not self.check_filename_in_database(str(path))
             ]
