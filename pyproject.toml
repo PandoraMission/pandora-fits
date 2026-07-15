@@ -5,6 +5,9 @@ description = "Tools to work with fits files for Pandora"
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 license = "MIT"
 readme = "docs/README.md"
+packages = [
+    { include = "pandorafits", from = "src" }
+]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
