@@ -4880,14 +4880,14 @@ tqdm = ">=4.60.1"
 
 [[package]]
 name = "pandoraspacecraft"
-version = "1.2.2"
+version = "1.2.3"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main", "dev"]
 files = [
-    {file = "pandoraspacecraft-1.2.2-py3-none-any.whl", hash = "sha256:1430cf260d974d11cc0ef09431403ae38ef45adc15d657499988311b51201392"},
-    {file = "pandoraspacecraft-1.2.2.tar.gz", hash = "sha256:5fbe43e11de6b130c1f284f63710f942b1d8f679f22ceedd59b444ebe18fdedf"},
+    {file = "pandoraspacecraft-1.2.3-py3-none-any.whl", hash = "sha256:6fb471083c74d43d8096307250502c3862496d54d4ed203e32d313f75d79935b"},
+    {file = "pandoraspacecraft-1.2.3.tar.gz", hash = "sha256:21adf342f16990d0a4233f7685162f7fef9cb7dd457875e07ecc5afc4cf16bd4"},
 ]
 
 [package.dependencies]
@@ -7555,4 +7555,4 @@ database = ["fitsio"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "f91770a0685f3ee605e8edcfb290dc1e363f2092d39eacb8b23da534764eaa86"
+content-hash = "51a9cccb39a1aa5e6fa27b644a7aa5d1074b139bb0fa960ebae82cf79e478989"
