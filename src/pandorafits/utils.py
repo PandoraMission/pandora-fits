@@ -17,6 +17,7 @@ BITPIX_DICT = {
     8: (">u1", "Unsigned 8-bit integer, big-endian"),
     16: (">i2", "Signed 16-bit integer, big-endian"),
     32: (">i4", "Signed 32-bit integer, big-endian"),
+    64: (">i8", "Signed 64-bit integer, big-endian"),
     -32: (">f4", "32-bit floating-point (float32), big-endian"),
     -64: (">f8", "64-bit floating-point (float64), big-endian"),
 }

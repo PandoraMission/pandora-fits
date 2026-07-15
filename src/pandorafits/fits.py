@@ -419,17 +419,6 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         return None
 
     @property
-    def targ(self):
-        if "TARG_RA" in self[0].header:
-            return SkyCoord(
-                self[0].header["TARG_RA"],
-                self[0].header["TARG_DEC"],
-                unit="deg",
-            )
-        else:
-            return None
-
-    @property
     def wcs(self):
         if np.any(["WCSAXES" in self[idx].header for idx in range(len(self))]):
             return [
@@ -613,12 +602,12 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         t = self.time.jd
         df["jd"] = t
         df["exptime"] = self.exptime.value
-        df["sep"] = np.hypot(
-            df.avg_ra.values - self.targ.ra.value,
-            df.avg_dec.values - self.targ.dec.value,
+        df["target_sep"] = np.hypot(
+            df.avg_ra.values - self.coord.ra.value,
+            df.avg_dec.values - self.coord.dec.value,
         )
-        df["count"] = count
-        df["missing"] = missing
+        df["vitl_frames_count"] = count
+        df["vitl_missing_frames"] = missing
         # if len(df) <= 3:
         #     df["stability"] = np.nan
         #     df["recall"] = np.nan

@@ -12,6 +12,7 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
 from astropy.time import Time
+from pandoraref import __version__ as prversion
 
 from . import NIRDAReference, __version__, logger
 from .database import AstrometryDataBase, Level0DataBase
@@ -101,7 +102,7 @@ class ProcessingMixins:
     def _append_wavelength(self):
         logger.info("Appending wavelength")
         dy = self.row[:, None] - self["VECTORS"].data["posy"]
-        wav = NIRDAReference.get_wavelength_from_position(dy)
+        wav = NIRDAReference.get_wavelength_from_position(dy).value
         self.append(fits.CompImageHDU(wav.T, name="Wavelength"))
 
     def _append_wcs(self):
@@ -126,6 +127,12 @@ class ProcessingMixins:
                 )
         wcs_hdr = wcs.to_header(relax=True)
         self[1].header.extend(wcs_hdr)
+        x, y = wcs.world_to_pixel(self.coord)
+        self[0].header["POS_X"], self[0].header["POS_Y"] = (
+            (float(x), "X [column] Pixel position of target"),
+            (float(y), "Y [row] Pixel position of target"),
+        )
+
         self[0].header["COMMENT"] = "Appended WCS."
 
     # def _append_wcs(self):
@@ -147,7 +154,7 @@ class ProcessingMixins:
         df["posx"], df["posy"] = self.wcs.world_to_pixel(
             SkyCoord(df.avg_ra.values, df.avg_dec.values, unit="deg")
         )
-        posx, posy = self.wcs.world_to_pixel(self.targ)
+        posx, posy = self.wcs.world_to_pixel(self.coord)
         df["posx"] = df["posx"].fillna(posx)
         df["posy"] = df["posy"].fillna(posy)
 
@@ -381,10 +388,11 @@ class ProcessingMixins:
     def to_level1(self, upcast=True, **kwargs):
         if self.level >= 1:
             raise ValueError("This is a Level 1 Product.")
+        new = self.copy()
         if "NIRDALevel0HDUList" in self.__class__.__name__:
-            new = self.difference_sample()
+            new.difference_sample()
         else:
-            new = self.copy()
+            new.fix()
         new._update_pointing_params()
         new._append_wcs()
 
@@ -405,13 +413,13 @@ class ProcessingMixins:
             new._append_wcs()
 
         new[0].header["PFSOFTV"] = __version__
+        new[0].header["PRSOFTV"] = prversion
 
         # This header keyword set isn't fitting in FITS conventions so we're renaming them if present.
         # We switch it out to "UNIT"
         for key in ["TTYPE1", "TFORM1", "TUNIT1"]:
             if key in new[1].header:
                 new[1].header.remove(key)
-        new[1].header["PFSOFTV"] = __version__
 
         new._update_astrometry_extension()
         new._update_catalog_params()
@@ -428,6 +436,12 @@ class ProcessingMixins:
             Time.now().isot,
             "Pandora DPC Processing Time",
         )
+        if "VISDALevel0HDUList" in self.__class__.__name__:
+            new["SCIENCE"] = fits.CompImageHDU(
+                new["SCIENCE"].data, name="SCIENCE"
+            )
+            new["SCIENCE"].header["UNIT"] = "COUNTS"
+
         if upcast:
             new = new.__to_l1__()
         return new

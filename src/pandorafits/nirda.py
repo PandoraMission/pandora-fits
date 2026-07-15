@@ -149,7 +149,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
                     [
                         fits.PrimaryHDU(header=hdr),
                         fits.CompImageHDU(
-                            data=self[1].data[:idx], name="SCIENCE"
+                            data=self["SCIENCE"].data[:idx], name="SCIENCE"
                         ),
                     ]
                 )
@@ -157,13 +157,13 @@ class NIRDALevel0HDUList(PandoraHDUList):
             logger.info("Fixed truncated NIRDA file.")
 
         hdr = self[0].header
-        data = self[1].data
+        data = self["SCIENCE"].data
         shape = (
             hdr["INTEGRTS"],
             hdr["GRPS"],
             hdr["READS"],
-            self[1].header["NAXIS2"],
-            self[1].header["NAXIS1"],
+            self["SCIENCE"].header["NAXIS2"],
+            self["SCIENCE"].header["NAXIS1"],
         )
         t = get_nirda_frame_times(hdr).reshape(shape[:-2])
         exptime = get_nirda_ramp_times(hdr).reshape(shape[:-2]) * (
@@ -208,33 +208,33 @@ class NIRDALevel0HDUList(PandoraHDUList):
         logger.info("Fowler sampling data.")
         hdr = self[0].header
         if hdr["GRPS"] > 1:
-            t = self[2].data[:, :, 0]
-            i = self[4].data[:, :, 0]
+            t = self["TIME"].data[:, :, 0]
+            i = self["INTEGRATION"].data[:, :, 0]
             if hdr["GRPSAVGD"] == 1:
-                exptime = self[3].data[:, :, 0]
-                d = self[1].data[:, :, 0].astype(float)
+                exptime = self["EXPTIME"].data[:, :, 0]
+                d = self["SCIENCE"].data[:, :, 0].astype(float)
             elif hdr["GRPSAVGD"] == 0:
-                exptime = self[3].data.mean(axis=2)
-                d = self[1].data.astype(float).mean(axis=2)
+                exptime = self["EXPTIME"].data.mean(axis=2)
+                d = self["SCIENCE"].data.astype(float).mean(axis=2)
         elif hdr["READS"] > 1:
             if hdr["GRPSAVGD"] == 1:
                 # Can not fowler sample
                 raise ValueError("No groups or reads to fowler sample.")
             elif hdr["GRPSAVGD"] == 0:
-                i = self[4].data[:, 0, :]
-                exptime = self[3].data[:, 0, :]
-                t = self[2].data[:, 0, :]
-                d = self[1].data.astype(float)[:, 0, :]
+                i = self["INTEGRATION"].data[:, 0, :]
+                exptime = self["EXPTIME"].data[:, 0, :]
+                t = self["TIME"].data[:, 0, :]
+                d = self["SCIENCE"].data.astype(float)[:, 0, :]
 
         self._update_data(
             ((d[:, -1] - d[:, 0]) * u.count)
             / (
                 (exptime[:, -1] - exptime[:, 0])[:, None, None]
-                * u.Quantity(1, self[3].header["unit"])
+                * u.Quantity(1, self["EXPTIME"].header["unit"])
             ),
             Time(t[:, 1], format="jd"),
             (exptime[:, -1] - exptime[:, 0])
-            * u.Quantity(1, self[3].header["unit"]),
+            * u.Quantity(1, self["EXPTIME"].header["unit"]),
             i[:, 1],
         )
         self[0].header["COLLAPS"] = 1
@@ -248,19 +248,19 @@ class NIRDALevel0HDUList(PandoraHDUList):
             self = self.fix()
         logger.info("Difference sampling data.")
         hdr = self[0].header
-        shape = self[1].data.shape
+        shape = self["SCIENCE"].data.shape
         if (hdr["READS"] > 1) & (hdr["GRPSAVGD"] == 0):
             a = np.ones((shape[0], shape[1], shape[2] - 1), bool)
-            d = np.diff(self[1].data.astype(float), axis=2)[a]
-            t = self[2].data[:, :, 1:][a]
-            exptime = np.diff(self[3].data, axis=2)[a]
-            i = self[4].data[:, :, 1:][a]
+            d = np.diff(self["SCIENCE"].data.astype(float), axis=2)[a]
+            t = self["TIME"].data[:, :, 1:][a]
+            exptime = np.diff(self["EXPTIME"].data, axis=2)[a]
+            i = self["INTEGRATION"].data[:, :, 1:][a]
         elif hdr["GRPS"] > 1:
             a = np.ones((shape[0], shape[1] - 1, shape[2]), bool)
-            d = np.diff(self[1].data.astype(float), axis=1)[a]
-            t = self[2].data[:, 1:, :][a]
-            exptime = np.diff(self[3].data, axis=1)[a]
-            i = self[4].data[:, 1:, :][a]
+            d = np.diff(self["SCIENCE"].data.astype(float), axis=1)[a]
+            t = self["TIME"].data[:, 1:, :][a]
+            exptime = np.diff(self["EXPTIME"].data, axis=1)[a]
+            i = self["INTEGRATION"].data[:, 1:, :][a]
         else:
             raise ValueError(
                 "Can not difference sample when integrations contain a single resultant read frame."
@@ -268,9 +268,12 @@ class NIRDALevel0HDUList(PandoraHDUList):
         self._update_data(
             d
             * u.count
-            / (exptime[:, None, None] * u.Quantity(1, self[3].header["unit"])),
+            / (
+                exptime[:, None, None]
+                * u.Quantity(1, self["EXPTIME"].header["unit"])
+            ),
             Time(t, format="jd"),
-            exptime * u.Quantity(1, self[3].header["unit"]),
+            exptime * u.Quantity(1, self["EXPTIME"].header["unit"]),
             i,
         )
         self[0].header["COLLAPS"] = 1
@@ -279,11 +282,37 @@ class NIRDALevel0HDUList(PandoraHDUList):
 
     @property
     def time(self):
-        return Time(self["TIME"].data, format="jd")
+        if "TIME" not in self:
+            hdr = self[0].header
+            shape = (
+                hdr["INTEGRTS"],
+                hdr["GRPS"],
+                hdr["READS"],
+                self["SCIENCE"].header["NAXIS2"],
+                self["SCIENCE"].header["NAXIS1"],
+            )
+            return get_nirda_frame_times(hdr).reshape(shape[:-2])
+        else:
+            return Time(self["TIME"].data, format="jd")
 
     @property
     def exptime(self):
-        return u.Quantity(self["EXPTIME"].data, self["EXPTIME"].header["UNIT"])
+        if "EXPTIME" not in self:
+            hdr = self[0].header
+            shape = (
+                hdr["INTEGRTS"],
+                hdr["GRPS"],
+                hdr["READS"],
+                self["SCIENCE"].header["NAXIS2"],
+                self["SCIENCE"].header["NAXIS1"],
+            )
+            return get_nirda_ramp_times(hdr).reshape(shape[:-2]) * (
+                hdr["FRMTIME"] * u.millisecond * hdr["READS"]
+            ).to(u.second)
+        else:
+            return u.Quantity(
+                self["EXPTIME"].data, self["EXPTIME"].header["UNIT"]
+            )
 
     # @property
     # def time(self):

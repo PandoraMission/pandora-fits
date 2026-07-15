@@ -8,8 +8,9 @@ import numpy as np
 import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
+from astropy.time import Time
 
-from . import FORMATSDIR, VISDAPRF, VISDAReference
+from . import FORMATSDIR, VISDAPRF, VISDAReference, logger
 from .fits import PandoraHDUList
 from .io import register_hdulist
 from .report import ReportMixins
@@ -45,6 +46,26 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
     instrument = "VISDA"
 
     def fix(self):
+        for hdu in ["TIME", "EXPTIME"]:
+            if hdu in self:
+                self.pop(hdu)
+
+        self.append(
+            fits.ImageHDU(
+                self.time.jd,
+                name="TIME",
+                header=fits.Header([("FRAME", "JD", "Time frame is JD")]),
+            )
+        )
+        self.append(
+            fits.ImageHDU(
+                self.exptime.value,
+                name="EXPTIME",
+                header=fits.Header([("UNIT", "second", "Exposure time unit")]),
+            )
+        )
+        self[0].header["FIXED"] = True
+        logger.info("Rearranged VISDA file.")
         return self
 
     @property
@@ -61,12 +82,20 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
 
     @property
     def time(self):
-        dt = timedelta(seconds=self.frame_time.to(u.second).value)
-        return self.start_time + (np.arange(self.nframes) * dt)
+        if "TIME" not in self:
+            dt = timedelta(seconds=self.frame_time.to(u.second).value)
+            return self.start_time + (np.arange(self.nframes) * dt)
+        else:
+            return Time(self["TIME"].data, format="jd")
 
     @property
     def exptime(self):
-        return np.ones(self.nframes) * self.frame_time.to(u.second)
+        if "EXPTIME" not in self:
+            return np.ones(self.nframes) * self.frame_time.to(u.second)
+        else:
+            return u.Quantity(
+                self["EXPTIME"].data, unit=self["EXPTIME"].header["UNIT"]
+            )
 
     def split(self, idxs=None):
         if idxs is None:
@@ -84,7 +113,7 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             )
             tab1 = fits.TableHDU(self[2].data[[tdx]], header=self[2].header)
             hdulist = fits.HDUList([pri, im1, tab1, *self[3:]])
-            hdulist = VISDALevel0HDUList(hdulist)
+            hdulist = self.__class__(hdulist)
             hdulists.append(hdulist)
         if ndim == 0:
             return hdulists[0]
