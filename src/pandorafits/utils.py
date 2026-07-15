@@ -6,9 +6,11 @@ from datetime import timedelta
 from typing import List, Union
 
 # Third-party
+import astropy.units as u
 import numpy as np
 import openpyxl
 import pandas as pd
+from astropy.io import fits
 from astropy.time import Time
 
 BITPIX_DICT = {
@@ -45,7 +47,7 @@ def convert_time(corstime, finetime):
 
 def get_dpc_hashkey(targ_id, ra, dec):
     key = (
-        targ_id,
+        targ_id.lower(),
         np.round(np.nan_to_num(ra) if ra is not None else 0.0, 1),
         np.round(np.nan_to_num(dec) if dec is not None else 0.0, 1),
     )
@@ -192,3 +194,49 @@ def get_excel_sheet(fname, extno=0):
         drop=True
     )
     return df
+
+
+def get_header(file, index=0):
+    if isinstance(file, str):
+        with fits.open(file) as hdulist:
+            hdr = hdulist[index].header
+    elif isinstance(file, fits.Header):
+        hdr = file
+    elif isinstance(file, fits.HDUList):
+        hdr = file[index].header
+    elif "FITSHDR" in type(file).__name__:
+        hdr = file
+    elif hasattr(file, "header"):
+        hdr = file.header
+    elif hasattr(file, "read_header"):
+        hdr = file.read_header()
+    elif "FITS" in type(file).__name__:
+        if hasattr(file[index], "read_header"):
+            hdr = file[index].read_header()
+    return hdr
+
+
+def get_read_time(hdr0):
+    if not isinstance(hdr0, fits.Header):
+        hdr0 = get_header(hdr0, 0)
+    # InfImg
+    if "FRMTIME" in hdr0:
+        return (u.millisecond * hdr0["FRMTIME"]).to(u.second)
+    else:
+        return (u.microsecond * hdr0["EXPTIME"]).to(u.second)
+
+
+def get_exposure_time(hdr0):
+    read_time = get_read_time(hdr0)
+    if hdr0["INSTRMNT"] == "VISDA":
+        if "FRMPCOAD" in hdr0:
+            frmpcoad = hdr0["FRMPCOAD"]
+        else:
+            frmpcoad = 1
+        if "NUMPCOAD" in hdr0:
+            numpcoad = hdr0["NUMPCOAD"]
+        else:
+            numpcoad = 1
+        return read_time * frmpcoad * numpcoad
+    else:
+        return hdr0["FRMSTOT"] * read_time

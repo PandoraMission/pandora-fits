@@ -42,16 +42,13 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
                 FROM level{self.level - 1}.pointings AS src
                 LEFT JOIN pointings AS dst
                         ON src.filename = dst.filename
-                WHERE (src.crsoftver = ? AND src.badchecksum = 0 AND src.baddatasum = 0)
-                    AND (dst.filename IS NULL OR dst.pfsoftver != ?);""",
-            (CRSOFTVER, __version__),
+                WHERE (src.badchecksum = 0 AND src.baddatasum = 0)
+                    AND (dst.filename IS NULL OR dst.pfsoftver != "{__version__}");""",
         )
         nrows = self.cur.fetchone()[0]
         return nrows
 
-    def get_x_to_process(
-        self, x, crsoftver=CRSOFTVER, nchunks=None, chunk=None
-    ):
+    def get_x_to_process(self, x, nchunks=None, chunk=None):
         # Compute limit/offset if chunking is requested
         if nchunks is not None and chunk is not None:
             # total files
@@ -68,11 +65,11 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
             FROM level{self.level - 1}.pointings AS src
             LEFT JOIN pointings AS dst
                  ON src.filename = dst.filename
-            WHERE (src.crsoftver = ? AND src.badchecksum = 0 AND src.baddatasum = 0)
+            WHERE (src.badchecksum = 0 AND src.baddatasum = 0)
               AND (dst.filename IS NULL OR dst.pfsoftver != ?)
         """
 
-        params = [crsoftver, __version__]
+        params = [__version__]
 
         # Add LIMIT/OFFSET only if chunking
         if limit is not None:
@@ -87,28 +84,20 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         else:
             return []
 
-    def get_files_to_process(
-        self, crsoftver=CRSOFTVER, nchunks=None, chunk=None
-    ):
+    def get_files_to_process(self, nchunks=None, chunk=None):
         files = self.get_x_to_process(
             x="src.lvldir, src.lvlfilename",
-            crsoftver=crsoftver,
             nchunks=nchunks,
             chunk=chunk,
         )
         return [os.path.join(f[0], f[1]) for f in files]
 
-    def n_files_to_process(self, crsoftver=CRSOFTVER):
-        return self.get_x_to_process(
-            x="COUNT()", crsoftver=crsoftver, nchunks=None, chunk=None
-        )[0]
+    # def n_files_to_process(self):
+    #     return self.get_x_to_process(x="COUNT()", nchunks=None, chunk=None)[0]
 
-    def get_pointings_to_process(
-        self, crsoftver=CRSOFTVER, nchunks=None, chunk=None
-    ):
+    def get_pointings_to_process(self, nchunks=None, chunk=None):
         return self.get_x_to_process(
             x="src.targ_ra, src.targ_dec, src.targ_rll",
-            crsoftver=crsoftver,
             nchunks=nchunks,
             chunk=chunk,
         )
@@ -135,8 +124,8 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
     def get_output_filename(self, filename_or_row):
         if isinstance(filename_or_row, tuple):
             row = filename_or_row
-            t = Time(row[13], format="jd").to_datetime()
-            targ_id, targ_ra, targ_dec = row[21], row[22], row[23]
+            t = Time(row[12], format="jd").to_datetime()
+            targ_id, targ_ra, targ_dec = row[20], row[21], row[22]
             fname = row[0]
         elif isinstance(filename_or_row, str):
             fname = os.path.basename(filename_or_row)
@@ -193,21 +182,13 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         logger.info(f"Wrote {os.path.basename(filename)} to {path}")
         return self.get_entry(filename)
 
-    def crawl_and_process(self, crsoftver=CRSOFTVER, nchunks=None, chunk=None):
-        paths = self.get_files_to_process(
-            crsoftver=crsoftver, nchunks=nchunks, chunk=chunk
-        )
-        pointings = self.get_pointings_to_process(
-            crsoftver=crsoftver, nchunks=nchunks, chunk=chunk
-        )
-        for pointing, path in zip(pointings, paths):
+    def crawl_and_process(self, nchunks=None, chunk=None):
+        paths = self.get_files_to_process(nchunks=nchunks, chunk=chunk)
+        for path in paths:
             try:
                 self.add_entry(
                     self.process(
                         path,
-                        # targ_ra=pointing[0] if pointing[0] is not None else 0,
-                        # targ_dec=pointing[1] if pointing[1] is not None else 0,
-                        # targ_rll=pointing[2] if pointing[2] is not None else 40,
                     )
                 )
             except:

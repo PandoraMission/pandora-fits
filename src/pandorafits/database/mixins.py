@@ -49,6 +49,14 @@ class DataBaseMixins:
             self.cur.execute(
                 f"""CREATE INDEX IF NOT EXISTS  idx_filename ON {self.table_name}(filename);"""
             )
+        if "jd" in self._sql_key_dict.keys():
+            self.cur.execute(
+                f"""CREATE INDEX IF NOT EXISTS  idx_jd ON {self.table_name}(jd);"""
+            )
+        if "start" in self._sql_key_dict.keys():
+            self.cur.execute(
+                f"""CREATE INDEX IF NOT EXISTS  idx_start ON {self.table_name}(start);"""
+            )
 
         self.conn.commit()
 
@@ -74,6 +82,10 @@ class DataBaseMixins:
         if self.conn:
             self.conn.close()
 
+    @property
+    def size(self):
+        return os.path.getsize(self.db_path) / (1024**2)
+
     def add_entry(self, values):
         if values is not None:
             self.cur.execute(
@@ -89,8 +101,18 @@ class DataBaseMixins:
         )
         self.conn.commit()
 
-    def to_pandas(self, time_range=None, **kwargs):
-        sql = f"SELECT * FROM {self.table_name}"
+    def to_pandas(self, time_range=None, columns=None, **kwargs):
+        if columns is None:
+            columns = "*"
+        elif isinstance(columns, list):
+            columns = ", ".join(columns)
+        elif isinstance(columns, str):
+            pass
+        else:
+            raise ValueError(
+                "Can not parse `columns`, select the columns you need."
+            )
+        sql = f"SELECT {columns} FROM {self.table_name}"
         params = []
 
         where_clauses = []
@@ -120,6 +142,28 @@ class DataBaseMixins:
             (fname,),
         )
         return self.cur.fetchone() is not None
+
+    def get_status(self):
+        sql = f"""SELECT jd FROM {self.table_name} ORDER BY jd LIMIT 1;"""
+        try:
+            start = Time(pd.read_sql_query(sql, self.conn).jd[0], format="jd")
+        except KeyError:
+            start = np.nan
+        sql = f"""SELECT jd FROM {self.table_name} ORDER BY jd DESC LIMIT 1;"""
+        try:
+            end = Time(pd.read_sql_query(sql, self.conn).jd[0], format="jd")
+        except KeyError:
+            end = np.nan
+        return pd.DataFrame(
+            np.asarray(
+                [
+                    start.isot if isinstance(start, Time) else np.nan,
+                    end.isot if isinstance(end, Time) else np.nan,
+                ]
+            )[None, :],
+            columns=["start", "end"],
+            index=[self.__class__.__name__],
+        )
 
     # def _update_roll(self):
     #     df = pd.read_sql_query(

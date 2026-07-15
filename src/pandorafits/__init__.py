@@ -210,8 +210,11 @@ def display_config() -> pd.DataFrame:
 
 NIRDAReference = pr.NIRDAReference()
 VISDAReference = pr.VISDAReference()
+NIRDAPRF = pa.PRF.from_reference("NIRDA")
+VISDAPRF = pa.PRF.from_reference("VISDA")
 
-ps = PandoraSpacecraft()
+
+ps = PandoraSpacecraft(tles_only=True)
 
 from .io import *  # noqa
 from .nirda import *  # noqa

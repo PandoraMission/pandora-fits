@@ -8,10 +8,11 @@ from datetime import timedelta
 from pathlib import Path
 
 # Third-party
-import fitsio
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
+
+# import fitsio
 from astropy.io import fits
 from astropy.time import Time
 from tqdm import tqdm
@@ -26,7 +27,7 @@ def get_entry(filename, checksums=False):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")  # capture all warnings
 
-        with fitsio.FITS(filename) as hdulist:
+        with fits.open(filename) as hdulist:
             if len(hdulist) <= 1:
                 return
 
@@ -42,60 +43,58 @@ def get_entry(filename, checksums=False):
                     else:
                         raise e
 
-            hdr = hdulist[0].read_header()
+            hdr = hdulist[0].header
             time = convert_time(hdr["CORSTIME"], hdr["FINETIME"])
             for key in ["FINETIME", "CORSTIME"]:
                 if key not in hdr:
                     return
-            hashkey = get_dpc_hashkey(
-                hdr["TARG_ID"],
-                hdr["TARG_RA"],
-                hdr["TARG_DEC"],
-            )
+            # hashkey = get_dpc_hashkey(
+            #     hdr["TARG_ID"],
+            #     hdr["TARG_RA"],
+            #     hdr["TARG_DEC"],
+            # )
             has_astrometry = False
             if ("ASTROMETRY" in hdulist) and ("TEMP_TIME" in hdulist):
-                try:
-                    cols = hdulist["ASTROMETRY"].get_colnames()
-                    astrometry_data = np.asarray(
-                        np.asarray(
-                            [hdulist["ASTROMETRY"][col][:] for col in cols]
-                        )
-                    ).T
-                    cols = hdulist["TEMP_TIME"].get_colnames()
-                    temp_data = np.asarray(
-                        np.asarray(
-                            [hdulist["TEMP_TIME"][col][:] for col in cols]
-                        )
-                    ).T
+                cols = hdulist["ASTROMETRY"].columns.names
+                dat = hdulist["ASTROMETRY"].data
+                astrometry_data = np.asarray(
+                    np.asarray([dat[col][:] for col in cols])
+                ).T
+                cols = hdulist["TEMP_TIME"].columns.names
+                dat = hdulist["TEMP_TIME"].data
+                temp_data = np.asarray(
+                    np.asarray([dat[col][:] for col in cols])
+                ).T
 
-                    mx = np.min([len(astrometry_data), len(temp_data)])
-                    temp_data, astrometry_data = (
-                        temp_data[:mx],
-                        astrometry_data[:mx],
-                    )
-                    k = (~(astrometry_data == 0).all(axis=1)) & (
-                        ~(temp_data == 0).all(axis=1)
-                    )
-                    astrometry_data = astrometry_data[k, :]
-                    temp_data = temp_data[k, :]
-                    if len(astrometry_data) > 0:
-                        has_astrometry = True
-                except OSError:
-                    pass
+                mx = np.min([len(astrometry_data), len(temp_data)])
+                temp_data, astrometry_data = (
+                    temp_data[:mx],
+                    astrometry_data[:mx],
+                )
+                k = (
+                    (~(astrometry_data == 0).all(axis=1))
+                    & (~(temp_data == 0).all(axis=1))
+                    & np.isfinite(astrometry_data).all(axis=1)
+                    & np.isfinite(temp_data).all(axis=1)
+                )
+                astrometry_data = astrometry_data[k, :]
+                temp_data = temp_data[k, :]
+                if len(astrometry_data) > 0:
+                    has_astrometry = True
 
             if not has_astrometry:
                 return None
             return [
                 (
                     os.path.basename(filename),
-                    hdr["CRSOFTV"],
-                    __version__,
-                    time.jd,
+                    # hdr["CRSOFTV"],
+                    # __version__,
+                    np.round(time.jd, 6),
                     time.jd
                     + ((temp_data[-1][0] / 1e3) / (24.0 * 60.0 * 60.0)),
                     time.jd
                     + ((temp_data[idx][0] / 1e3) / (24.0 * 60.0 * 60.0)),
-                    hashkey,
+                    # hashkey,
                     hdr["TARG_ID"],
                     hdr["TARG_RA"],
                     hdr["TARG_DEC"],
@@ -115,12 +114,12 @@ class AstrometryDataBase(DataBaseMixins):
     db_path = os.path.join(LEVEL0_DIR, "astrometry.db")
     _sql_key_dict = {
         "filename": "TEXT",
-        "crsoftver": "TEXT",
-        "pfsoftver": "TEXT",
+        # "crsoftver": "TEXT",
+        # "pfsoftver": "TEXT",
         "start": "FLOAT",
         "end": "FLOAT",
         "jd": "FLOAT",
-        "dpc_hash_key": "TEXT",
+        # "dpc_hash_key": "TEXT",
         "targ_id": "STR",
         "targ_ra": "FLOAT",
         "targ_dec": "FLOAT",
@@ -219,9 +218,7 @@ class AstrometryDataBase(DataBaseMixins):
                 paths = np.sort(
                     [
                         str(path)
-                        for path in Path(root).rglob(
-                            f"*2026-05-0*{image_type}*.fits"
-                        )
+                        for path in Path(root).rglob(f"*{image_type}*.fits")
                         if not self.check_filename_in_database(str(path))
                     ]
                 )
