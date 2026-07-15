@@ -94,20 +94,20 @@ def delete_astrometrydatabase() -> None:
         )
 
 
-def update_astrometrydatabase() -> None:
+def update_astrometrydatabase(match_str="") -> None:
     """
     Creates and updates to the SQLite database file.
     """
     with AstrometryDataBase() as db:
-        db.crawl_and_add()
+        db.crawl_and_add(match_str=match_str)
 
 
-def update_level0database() -> None:
+def update_level0database(match_str="") -> None:
     """
     Creates and updates to the SQLite database file.
     """
     with Level0DataBase() as db:
-        db.crawl_and_add()
+        db.crawl_and_add(match_str=match_str)
 
 
 def delete_level0database() -> None:

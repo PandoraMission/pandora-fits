@@ -211,14 +211,16 @@ class AstrometryDataBase(DataBaseMixins):
     #                 for idx in range(len(astrometry_data))
     #             ]
 
-    def crawl_and_add(self):
+    def crawl_and_add(self, match_str=""):
         root = DATA_DIR
         with logging_redirect_tqdm():
             for image_type in ["VisSci"]:
                 paths = np.sort(
                     [
                         str(path)
-                        for path in Path(root).rglob(f"*{image_type}*.fits")
+                        for path in Path(root).rglob(
+                            f"*{match_str}*{image_type}*.fits"
+                        )
                         if not self.check_filename_in_database(str(path))
                     ]
                 )

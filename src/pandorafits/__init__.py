@@ -102,7 +102,7 @@ def reset_config():
         "level1_dir": str(user_root / "level1"),
         "level2_dir": str(user_root / "level2"),
         "level3_dir": str(user_root / "level3"),
-        "crsoftver": "v3.03",
+        "crsoftver": "v3.06",
     }
     with builtins.open(CONFIGPATH, "w") as configfile:
         config.write(configfile)

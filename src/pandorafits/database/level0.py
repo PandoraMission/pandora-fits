@@ -243,14 +243,16 @@ class Level0DataBase(DataBaseMixins):
     #                 filesize,
     #             )
 
-    def crawl_and_add(self):
+    def crawl_and_add(self, match_str=""):
         root = DATA_DIR
         for image_type in ["InfImg", "VisSci", "VisImg"]:
             # for path in Path(root).rglob(f"*{image_type}*.fits"):
             #     self.add_entry(self.get_entry(str(path)))
             paths = [
                 str(path)
-                for path in Path(root).rglob(f"*{image_type}*.fits")
+                for path in Path(root).rglob(
+                    f"*{match_str}*{image_type}*.fits"
+                )
                 if not self.check_filename_in_database(str(path))
             ]
             rows = []
