@@ -248,7 +248,7 @@ class Level0DataBase(DataBaseMixins):
         for image_type in ["InfImg", "VisSci", "VisImg"]:
             # for path in Path(root).rglob(f"*{image_type}*.fits"):
             #     self.add_entry(self.get_entry(str(path)))
-            paths = np.asarray(
+            paths = np.sort(
                 [
                     str(path)
                     for path in Path(root).rglob(
@@ -260,7 +260,7 @@ class Level0DataBase(DataBaseMixins):
                 ]
             )
             path_idxs = np.unique(
-                [p.split("/")[-1] for p in paths], return_index=True
+                [p.split("/")[-1] for p in paths[::-1]], return_index=True
             )[1]
             paths = np.sort(paths[path_idxs])
             rows = []
