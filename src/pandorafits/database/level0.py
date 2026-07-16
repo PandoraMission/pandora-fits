@@ -248,15 +248,21 @@ class Level0DataBase(DataBaseMixins):
         for image_type in ["InfImg", "VisSci", "VisImg"]:
             # for path in Path(root).rglob(f"*{image_type}*.fits"):
             #     self.add_entry(self.get_entry(str(path)))
-            paths = [
-                str(path)
-                for path in Path(root).rglob(
-                    f"*{match_str}*{image_type}*.fits"
-                    if match_str != ""
-                    else f"*{image_type}*.fits"
-                )
-                if not self.check_filename_in_database(str(path))
-            ]
+            paths = np.asarray(
+                [
+                    str(path)
+                    for path in Path(root).rglob(
+                        f"*{match_str}*{image_type}*.fits"
+                        if match_str != ""
+                        else f"*{image_type}*.fits"
+                    )
+                    if not self.check_filename_in_database(str(path))
+                ]
+            )
+            path_idxs = np.unique(
+                [p.split("/")[-1] for p in paths], return_index=True
+            )[1]
+            paths = np.sort(paths[path_idxs])
             rows = []
             with logging_redirect_tqdm():
                 for path in tqdm(paths, desc=f"{image_type} files"):
