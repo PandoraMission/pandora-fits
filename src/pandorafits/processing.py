@@ -59,13 +59,21 @@ class ProcessingMixins:
 
     def _subtract_stripes(self):
         logger.info("Subtracting stripes")
-        self._apply_detector_image(
-            "stripes", lambda x, y: x - (y * self.frmpcoad)
-        )
+        if "FRMPCOAD" in self[0].header:
+            self._apply_detector_image(
+                "stripes", lambda x, y: x - (y * self.frmpcoad)
+            )
+        else:
+            self._apply_detector_image("stripes", lambda x, y: x - y)
 
     def _subtract_bias(self):
         logger.info("Subtracting bias")
-        self._apply_detector_image("bias", lambda x, y: x - y)
+        if "FRMPCOAD" in self[0].header:
+            self._apply_detector_image(
+                "bias", lambda x, y: x - (y * self.frmpcoad)
+            )
+        else:
+            self._apply_detector_image("bias", lambda x, y: x - y)
 
     def _subtract_dark(self):
         logger.info("Subtracting dark")
