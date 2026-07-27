@@ -167,7 +167,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
         )
         t = get_nirda_frame_times(hdr).reshape(shape[:-2])
         exptime = get_nirda_ramp_times(hdr).reshape(shape[:-2]) * (
-            hdr["FRMTIME"] * u.millisecond * hdr["READS"]
+            hdr["FRMTIME"] * u.millisecond
         ).to(u.second)
         I, _, _ = np.mgrid[: hdr["INTEGRTS"], : hdr["GRPS"], : hdr["READS"]]
 
@@ -307,7 +307,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
                 self["SCIENCE"].header["NAXIS1"],
             )
             return get_nirda_ramp_times(hdr).reshape(shape[:-2]) * (
-                hdr["FRMTIME"] * u.millisecond * hdr["READS"]
+                hdr["FRMTIME"] * u.millisecond
             ).to(u.second)
         else:
             return u.Quantity(

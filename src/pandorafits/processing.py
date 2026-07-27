@@ -402,7 +402,6 @@ class ProcessingMixins:
         else:
             new.fix()
         new._update_pointing_params()
-        new._append_wcs()
 
         if "VISDALevel0HDUList" in new.__class__.__name__:
             new = new.split_target()
@@ -418,6 +417,8 @@ class ProcessingMixins:
             new[0].header["ROISIZEX"] = new[0].header["STARDIMS"]
             new[0].header["ROISIZEY"] = new[0].header["STARDIMS"]
             new.pop("ROI_TABLE")
+            new._append_wcs()
+        else:
             new._append_wcs()
 
         new[0].header["PFSOFTV"] = __version__
@@ -446,7 +447,9 @@ class ProcessingMixins:
         )
         if "VISDALevel0HDUList" in self.__class__.__name__:
             new["SCIENCE"] = fits.CompImageHDU(
-                new["SCIENCE"].data, name="SCIENCE"
+                new["SCIENCE"].data,
+                name="SCIENCE",
+                header=new["SCIENCE"].header,
             )
             new["SCIENCE"].header["UNIT"] = "COUNTS"
 
