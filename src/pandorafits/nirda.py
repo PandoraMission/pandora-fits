@@ -2,14 +2,17 @@
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+
 from astropy.io import fits
 from astropy.time import Time
+from astropy.coordinates import SkyCoord
 
 from . import FORMATSDIR, NIRDAPRF, NIRDAReference, logger
 from .fits import PandoraHDUList
 from .io import register_hdulist
-
-# from .scene import get_NIRDA_scene
+from .report import ReportMixins
+from .scene import get_NIRDA_scene
 from .utils import convert_time
 
 __all__ = [
@@ -91,7 +94,7 @@ def get_nirda_ramp_times(hdr):
         )
     )
 )
-class NIRDALevel0HDUList(PandoraHDUList):
+class NIRDALevel0HDUList(PandoraHDUList, ReportMixins):
     filename = FORMATSDIR + "nirda/level0_nirda.xlsx"
     reference = NIRDAReference
     prf = NIRDAPRF
@@ -364,6 +367,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
         return NIRDALevel1HDUList(self)
 
     def plot_data(self, ax=None, idx=0, **kwargs):
+        ax_provided = ax is not None
         if ax is None:
             _, ax = plt.subplots(dpi=150, facecolor="white")
         d = self["science"].data[idx]
@@ -375,13 +379,65 @@ class NIRDALevel0HDUList(PandoraHDUList):
         )
         ax.set(
             aspect="equal",
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
             xlabel="ROI Column",
             ylabel="ROI Row",
         )
+        if not ax_provided:
+            # Don't add titles for figures made for fits reports.
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         plt.colorbar(im, ax=ax)
         # ax.margins(0)
         return ax
+
+    def describe(self):
+        keys = [
+            "TARG_ID",
+            "TARG_RA",
+            "TARG_DEC",
+            "EXPOSRES",
+            "RESETS1",
+            "RESETS2",
+            "DROPS1",
+            "DROPS2",
+            "DROPS3",
+            "READS",
+            "GRPS",
+            "INTEGRTS",
+            "ROISIZEX",
+            "ROISIZEY",
+            "TCLDTIP1",
+        ]
+
+        hdr = self[0].header
+        rows = []
+        for key in keys:
+            try:
+                value = hdr[key]
+                comment = hdr.comments[key]
+            except (KeyError, IndexError):
+                value, comment = "N/A", ""
+            if key in ("TARG_RA", "TARG_DEC", "TCLDTIP1"):
+                try:
+                    value = round(float(value), 4)
+                except (TypeError, ValueError):
+                    pass
+            rows.append([key, value, comment])
+
+        df = pd.DataFrame(rows, columns=["Key", "Value", "Comment"]).set_index(
+            "Key"
+        )
+        return df
+
+    def get_report_materials(self):
+        report_materials = dict()
+        report_materials["title"] = self[0].header.get("targ_id", "UNKNOWN")
+        report_materials["subtitle"] = self.start_time.isot
+        report_materials["report_metrics"] = self.describe()
+        report_materials["report_plots"] = [
+            lambda ax=None: self.plot_data(ax=ax)
+        ]
+
+        return report_materials
 
 
 @register_hdulist(
