@@ -255,6 +255,7 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         return mask
 
     def plot_data(self, ax=None, idx=0, **kwargs):
+        ax_provided = ax is not None
         if ax is None:
             _, ax = plt.subplots(dpi=250, facecolor="white")
         d = self["science"].data[idx]
@@ -264,42 +265,206 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         im = ax.pcolormesh(d, vmin=vmin, vmax=vmax, **kwargs)
         ax.set(
             aspect="equal",
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
             xlabel="Panel Column",
             ylabel="Panel Row",
         )
+        if not ax_provided:
+            # Don't add titles for figures made for fits reports.
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         plt.colorbar(im, ax=ax)
         # ax.margins(0)
         return ax
 
+    @property
+    def astrometry(self):
+        ra, dec, rot = np.asarray(
+            [
+                self["astrometry"].data[c]
+                for c in ["RightAscension", "Declination", "Rotation"]
+            ]
+        )
+        et = self[3].data["ExposureStartTime_us"]
+        et = et[: len(ra)]
+        if et[-1] > 2**60:
+            et = et[:-1]
+            ra, dec, rot = ra[:-1], dec[:-1], rot[:-1]
+
+        et = (
+            convert_time(
+                self[0].header["CORSTIME"], self[0].header["FINETIME"]
+            )
+            + et * u.ms
+        )
+        return et, ra, dec, rot
+
+    def get_position_data(self):
+        et, ra, dec, rot = self.astrometry
+        dt = timedelta(seconds=self.frame_time.to(u.second).value)
+        t = self.start_time
+        df = []
+        count, missing = [], []
+        for frame in np.arange(self.nframes):
+            j = (et >= (t + (dt * frame))) & (et < (t + (dt * (frame + 1))))
+            k = np.isfinite(ra) & np.isfinite(dec) & np.isfinite(rot)
+            k &= (ra != 0) & (dec != 0) & (rot != 0)
+            count.append(len(k[j]))
+            missing.append((~k[j]).sum())
+            k &= j
+            if not k.any():
+                df.append(
+                    pd.DataFrame(
+                        np.asarray([np.nan] * 6)[None, :],
+                        columns=[
+                            "avg_ra",
+                            "avg_dec",
+                            "avg_rot",
+                            "err_ra",
+                            "err_dec",
+                            "err_rot",
+                        ],
+                    )
+                )
+                continue
+            avg_ra, avg_dec, avg_rot = (
+                np.mean(ra[k]),
+                np.mean(dec[k]),
+                np.mean(rot[k]),
+            )
+            err_ra, err_dec, err_rot = (
+                np.median(np.abs(ra[k] - avg_ra)),
+                np.median(np.abs(dec[k] - avg_dec)),
+                np.median(np.abs(rot[k] - avg_rot)),
+            )
+            df.append(
+                pd.DataFrame(
+                    np.asarray(
+                        [avg_ra, avg_dec, avg_rot, err_ra, err_dec, err_rot]
+                    )[None, :],
+                    columns=[
+                        "avg_ra",
+                        "avg_dec",
+                        "avg_rot",
+                        "err_ra",
+                        "err_dec",
+                        "err_rot",
+                    ],
+                )
+            )
+        df = pd.concat(df).reset_index(drop=True)
+        t = self.time.jd
+        df["t"] = t
+        df["sep"] = np.hypot(
+            df.avg_ra.values - self.targ.ra.value,
+            df.avg_dec.values - self.targ.dec.value,
+        )
+        df["count"] = count
+        df["missing"] = missing
+        if len(df) <= 3:
+            df["stability"] = np.nan
+            df["recall"] = np.nan
+            df["stable"] = False
+        else:
+            df["stability"] = (
+                np.hypot(
+                    # np.gradient(df.err_ra.values, t), np.gradient(df.err_dec.values, t)
+                    df.err_ra.values,
+                    df.err_dec.values,
+                )
+                * 3600
+            )
+            df.loc[df["count"] < 5, "stability"] = np.nan
+            df["recall"] = (
+                np.hypot(
+                    np.gradient(
+                        df.avg_ra.values - np.nanmedian(df.avg_ra.values), t
+                    ),
+                    np.gradient(
+                        df.avg_dec.values - np.nanmedian(df.avg_dec.values), t
+                    ),
+                )
+                * 3600
+                / 86400
+            )
+        return df
+
+    def plot_astrometry(self, ax=None, **kwargs):
+        ax_provided = ax is not None
+        if ax is None:
+            _, ax = plt.subplots()
+        df = self.get_position_data()
+        ax.plot(
+            df.t.values / 1e3,
+            (df.avg_ra.values - df.avg_ra.mean()) * 3600,
+            label="RA",
+        )
+        ax.plot(
+            df.t.values / 1e3,
+            (df.avg_dec.values - df.avg_dec.mean()) * 3600,
+            label="Dec",
+        )
+        ax.legend()
+        ax.set(
+            xlabel="Time in Exposure [s]",
+            ylabel="Position - Mean Position [arcsecond]",
+        )
+        if not ax_provided:
+            # Don't add titles for figures made for fits reports.
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
+        return ax
+
     def describe(self):
         keys = [
-            "NUMSTARS",
             "TARG_ID",
             "TARG_RA",
             "TARG_DEC",
+            "NUMSTARS",
             "FRMSREQD",
             "FRMSCLCT",
-            "NUMSTARS",
             "STARDIMS",
             "NUMPCOAD",
             "FRMPCOAD",
+            "TARG_RLL",
         ]
 
         hdr = self[0].header
-        df = pd.DataFrame(
-            np.asarray([hdr.cards[key] for key in keys]),
-            columns=["Key", "Value", "Comment"],
-        ).set_index("Key")
+        rows = []
+        for key in keys:
+            try:
+                value = hdr[key]
+                comment = hdr.comments[key]
+            except (KeyError, IndexError):
+                value, comment = "N/A", ""
+            if key in ("TARG_RA", "TARG_DEC"):
+                try:
+                    value = round(float(value), 4)
+                except (TypeError, ValueError):
+                    pass
+            rows.append([key, value, comment])
+
+        df = pd.DataFrame(rows, columns=["Key", "Value", "Comment"]).set_index(
+            "Key"
+        )
         return df
 
     def get_report_materials(self):
-        return [
+        report_materials = dict()
+        report_materials["title"] = self[0].header.get("targ_id", "UNKNOWN")
+        report_materials["subtitle"] = self.start_time.isot
+        report_materials["report_metrics"] = self.describe()
+        report_materials["report_plots"] = [
             lambda ax=None: self.plot_data(ax=ax),
             lambda ax=None: self.plot_astrometry(ax=ax),
-            None,
-            lambda ax=None: self.plot_description(ax=ax),
         ]
+
+        return report_materials
+
+    def get_earth_angle(self):
+        return ps.get_angle_to_body(
+            self.time,
+            direction="z",
+            body="earth",
+            pointing_vecs=psc.utils.radec_to_vec(self.targ_ra, self.targ_dec),
+        )
 
     def __to_l1__(self):
         return VISDALevel1HDUList(self)
@@ -441,6 +606,7 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
     instrument = "VISDA"
 
     def plot_data(self, ax=None, **kwargs):
+        ax_provided = ax is not None
         if ax is None:
             _, ax = plt.subplots()
         d = self["science"].data[0]
@@ -450,10 +616,12 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
         im = ax.pcolormesh(d, vmin=vmin, vmax=vmax, **kwargs)
         ax.set(
             aspect="equal",
-            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
             xlabel="Column",
             ylabel="Row",
         )
+        if not ax_provided:
+            # Don't add titles for figures made for fits reports.
+            ax.set(title=f"{self[0].header['targ_id']} {self.start_time.isot}")
         plt.colorbar(im, ax=ax)
         # ax.margins(0)
         return ax
@@ -461,22 +629,47 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
     def describe(self):
         keys = [
             "TARG_ID",
+            "TARG_RA",
+            "TARG_DEC",
+            "NUMSTARS",
+            "FRMSREQD",
+            "FRMSCLCT",
+            "STARDIMS",
+            "NUMPCOAD",
+            "FRMPCOAD",
+            "TARG_RLL",
         ]
 
         hdr = self[0].header
-        df = pd.DataFrame(
-            np.asarray([hdr.cards[key] for key in keys]),
-            columns=["Key", "Value", "Comment"],
-        ).set_index("Key")
+        rows = []
+        for key in keys:
+            try:
+                value = hdr[key]
+                comment = hdr.comments[key]
+            except (KeyError, IndexError):
+                value, comment = "N/A", ""
+            if key in ("TARG_RA", "TARG_DEC"):
+                try:
+                    value = round(float(value), 4)
+                except (TypeError, ValueError):
+                    pass
+            rows.append([key, value, comment])
+
+        df = pd.DataFrame(rows, columns=["Key", "Value", "Comment"]).set_index(
+            "Key"
+        )
         return df
 
     def get_report_materials(self):
-        return [
-            lambda ax=None: self.plot_data(ax=ax),
-            None,
-            None,
-            lambda ax=None: self.plot_description(ax=ax),
+        report_materials = dict()
+        report_materials["title"] = self[0].header.get("targ_id", "UNKNOWN")
+        report_materials["subtitle"] = self.start_time.isot
+        report_materials["report_metrics"] = self.describe()
+        report_materials["report_plots"] = [
+            lambda ax=None: self.plot_data(ax=ax)
         ]
+
+        return report_materials
 
     def __to_l1__(self):
         return VISDAFFILevel1HDUList(self)
