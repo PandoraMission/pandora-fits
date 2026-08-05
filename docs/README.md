@@ -43,7 +43,7 @@ You should treat the `pandora-fits` objects as though they were `astropy.io.fits
 First you can import the correct `HDUList` object. Note that I am using the logger and setting the logger to the level `"ERROR"`.
 
 ```python
-from pandorafits.fits import NIRDALevel0HDUList
+from pandorafits.nirda import NIRDALevel0HDUList
 from pandorafits import logger
 logger.setLevel("ERROR")
 ```

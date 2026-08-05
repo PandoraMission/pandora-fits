@@ -1,19 +1,24 @@
 """Class to handle Pandora fits files"""
 
 # Standard library
-from datetime import timedelta
+import warnings
+from functools import cached_property
 
 # Third-party
 import astropy.units as u
+import gaiaoffline
+import matplotlib.pyplot as plt
 import numpy as np
-from astropy.coordinates import SkyCoord
+import pandas as pd
+import pandoraspacecraft as psc
+from astropy.coordinates import Distance, SkyCoord
 
 # import pandas as pd
 from astropy.io import fits
 from astropy.time import Time
 from astropy.wcs import WCS
 
-from . import logger
+from . import logger, ps
 from .processing import ProcessingMixins
 from .utils import (
     BITPIX_DICT,
@@ -21,6 +26,8 @@ from .utils import (
     generate_random_bintable_values,
     generate_random_table_values,
     get_excel_sheet,
+    get_exposure_time,
+    get_read_time,
 )
 
 __all__ = ["FITSTemplateException", "FITSValueException", "PandoraHDUList"]
@@ -115,7 +122,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
     def _validate_n_ext(self):
         """Validate that all the necessary extensions are present."""
         try:
-            k = np.in1d(
+            k = np.isin(
                 self.extension_names,
                 [hdu.header["EXTNAME"].lower() for hdu in self],
             )
@@ -402,15 +409,14 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
             return None
 
     @property
-    def targ(self):
-        if "TARG_RA" in self[0].header:
+    def coord(self):
+        if ("TARG_RA" in self[0].header) and ("TARG_DEC" in self[0].header):
             return SkyCoord(
                 self[0].header["TARG_RA"],
                 self[0].header["TARG_DEC"],
                 unit="deg",
             )
-        else:
-            return None
+        return None
 
     @property
     def wcs(self):
@@ -466,51 +472,270 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         return np.arange(hdr["ROISTRTX"], hdr["ROISTRTX"] + hdr["ROISIZEX"])
 
     @property
-    def frame_time(self):
-        if "FRMTIME" in self[0].header:
-            if self[0].header["GRPSAVGD"] == 0:
-                return (u.millisecond * self[0].header["FRMTIME"]).to(u.second)
-            else:
-                return (
-                    u.millisecond
-                    * self[0].header["FRMTIME"]
-                    * self[0].header["READS"]
-                ).to(u.second)
-        elif "EXPTIMEU" in self[0].header:
-            return (
-                u.microsecond
-                * self[0].header["EXPTIMEU"]
-                * self[0].header["FRMSCLCT"]
-                / self[1].header["NAXIS3"]
-            ).to(u.second)
-        elif "EXPTIME" in self[0].header:
-            return (
-                u.microsecond
-                * self[0].header["EXPTIME"]
-                * self[0].header["FRMSCLCT"]
-                / self[1].header["NAXIS3"]
-            ).to(u.second)
+    def read_time(self):
+        return get_read_time(self[0].header)
 
     @property
-    def nframes(self):
-        return self[1].header[f"NAXIS{self[1].header['NAXIS']}"]
-
-    @property
-    def ncoadds(self):
-        if "FRMPCOAD" in self[0].header:
-            return self[0].header["FRMPCOAD"]
-        elif self[0].header["INSTRMNT"] == "VISDA":
-            return 1
-        if self[0].header["GRPSAVGD"] == 0:
-            return 1
-        else:
-            return self[0].header["GRPS"]
+    def exposure_time(self):
+        return get_exposure_time(self[0].header)
 
     @property
     def end_time(self):
-        return self.start_time + self.nframes * self.frame_time
+        return self.start_time + self.exposure_time
+
+    # @property
+    # def nframes(self):
+    #     return self[1].header[f"NAXIS{self[1].header['NAXIS']}"]
+
+    # @property
+    # def ncoadds(self):
+    #     if "FRMPCOAD" in self[0].header:
+    #         return self[0].header["FRMPCOAD"]
+    #     elif self[0].header["INSTRMNT"] == "VISDA":
+    #         return 1
+    #     if self[0].header["GRPSAVGD"] == 0:
+    #         return 1
+    #     else:
+    #         return self[0].header["GRPS"]
+
+    # @property
+    # def end_time(self):
+    #     return self.start_time + self.nframes * self.frame_time
+
+    # @property
+    # def time(self):
+    #     dt = timedelta(seconds=self.frame_time.to(u.second).value)
+    #     return self.start_time + (np.arange(self.nframes) * dt)
 
     @property
-    def time(self):
-        dt = timedelta(seconds=self.frame_time.to(u.second).value)
-        return self.start_time + (np.arange(self.nframes) * dt)
+    def astrometry(self):
+        if "astrometry" in self:
+            if "JD" in self["astrometry"].data.columns.names:
+                jd, ra, dec, rot = np.asarray(
+                    [
+                        self["astrometry"].data[c]
+                        for c in [
+                            "JD",
+                            "RightAscension",
+                            "Declination",
+                            "Rotation",
+                        ]
+                    ]
+                )
+                jd = Time(jd, format="jd")
+                return jd, ra, dec, rot
+            else:
+                ra, dec, rot = np.asarray(
+                    [
+                        self["astrometry"].data[c]
+                        for c in ["RightAscension", "Declination", "Rotation"]
+                    ]
+                )
+                et = self[3].data["ExposureStartTime_us"]
+                et = et[: len(ra)]
+                if et[-1] > 2**60:
+                    et = et[:-1]
+                    ra, dec, rot = ra[:-1], dec[:-1], rot[:-1]
+
+                et = (
+                    convert_time(
+                        self[0].header["CORSTIME"], self[0].header["FINETIME"]
+                    )
+                    + et * u.ms
+                )
+                return et, ra, dec, rot
+        else:
+            raise ValueError("No `ASTROMETRY` extension.")
+
+    def get_position_data(self):
+        et, ra, dec, rot = self.astrometry
+        df = []
+        count, missing = [], []
+        for t, dt in zip(self.time, self.exptime):
+            j = (et >= (t)) & (et < (t + dt))
+            k = np.isfinite(ra) & np.isfinite(dec) & np.isfinite(rot)
+            k &= (ra != 0) & (dec != 0) & (rot != 0)
+            count.append(len(k[j]))
+            missing.append((~k[j]).sum())
+            k &= j
+            if not k.any():
+                df.append(
+                    pd.DataFrame(
+                        np.asarray([np.nan] * 6)[None, :],
+                        columns=[
+                            "avg_ra",
+                            "avg_dec",
+                            "avg_rot",
+                            "err_ra",
+                            "err_dec",
+                            "err_rot",
+                        ],
+                    )
+                )
+                continue
+            avg_ra, avg_dec, avg_rot = (
+                np.nanmean(ra[k]),
+                np.nanmean(dec[k]),
+                np.nanmean(rot[k]),
+            )
+            err_ra, err_dec, err_rot = (
+                np.nanmedian(np.abs(ra[k] - avg_ra)),
+                np.nanmedian(np.abs(dec[k] - avg_dec)),
+                np.nanmedian(np.abs(rot[k] - avg_rot)),
+            )
+            df.append(
+                pd.DataFrame(
+                    np.asarray(
+                        [avg_ra, avg_dec, avg_rot, err_ra, err_dec, err_rot]
+                    )[None, :],
+                    columns=[
+                        "avg_ra",
+                        "avg_dec",
+                        "avg_rot",
+                        "err_ra",
+                        "err_dec",
+                        "err_rot",
+                    ],
+                )
+            )
+        df = pd.concat(df).reset_index(drop=True)
+        t = self.time.jd
+        df["jd"] = t
+        df["exptime"] = self.exptime.value
+        df["target_sep"] = np.hypot(
+            df.avg_ra.values - self.coord.ra.value,
+            df.avg_dec.values - self.coord.dec.value,
+        )
+        df["vitl_frames_count"] = count
+        df["vitl_missing_frames"] = missing
+        # if len(df) <= 3:
+        #     df["stability"] = np.nan
+        #     df["recall"] = np.nan
+        #     df["stable"] = False
+        # else:
+        #     df["stability"] = (
+        #         np.hypot(
+        #             # np.gradient(df.err_ra.values, t), np.gradient(df.err_dec.values, t)
+        #             df.err_ra.values,
+        #             df.err_dec.values,
+        #         )
+        #         * 3600
+        #     )
+        #     df.loc[df["count"] < 5, "stability"] = np.nan
+        #     df["recall"] = (
+        #         np.hypot(
+        #             np.gradient(df.avg_ra.values - np.nanmedian(df.avg_ra.values), t),
+        #             np.gradient(df.avg_dec.values - np.nanmedian(df.avg_dec.values), t),
+        #         )
+        #         * 3600
+        #         / 86400
+        #     )
+        earth_angle = self.get_earth_angle()
+        df["earth_angle"] = earth_angle.value
+        df["earth_illumination"] = self.earth_illumination.value
+        df["sun_angle"] = self.sun_angle.value
+        df["visda_keepout"] = earth_angle.value > self.visda_keepout.value
+        df["nirda_keepout"] = earth_angle.value > self.nirda_keepout.value
+        return df
+
+    def plot_astrometry(self, ax=None, **kwargs):
+        if ax is None:
+            _, ax = plt.subplots()
+        df = self.get_position_data()
+        ax.plot(
+            df.jd.values / 1e3,
+            (df.avg_ra.values - df.avg_ra.mean()) * 3600,
+            label="RA",
+        )
+        ax.plot(
+            df.jd.values / 1e3,
+            (df.avg_dec.values - df.avg_dec.mean()) * 3600,
+            label="Dec",
+        )
+        ax.legend()
+        ax.set(
+            title=f"{self[0].header['targ_id']} {self.start_time.isot}",
+            xlabel="Time in Exposure [s]",
+            ylabel="Position - Mean Position [arcsecond]",
+        )
+        return ax
+
+    # @cached_property
+    # def earth_angle(self):
+    #     return ps.get_angle_to_body(self.time, "z", "earth")
+
+    def _get_angle(self, body, vec=None):
+        """Get angle from SC boresight to the body"""
+        if vec is None:
+            if ("ra" in self[0].header) & ("dec" in self[0].header):
+                ra, dec = self[0].header["ra"], self[0].header["dec"]
+                vec = psc.utils.radec_to_vec(ra, dec)
+            elif ("targ_ra" in self[0].header) & (
+                "targ_dec" in self[0].header
+            ):
+                ra, dec = self[0].header["targ_ra"], self[0].header["targ_dec"]
+                vec = psc.utils.radec_to_vec(ra, dec)
+        return ps.get_angle_to_body(
+            self.time,
+            direction="z",
+            body=body,
+            pointing_vecs=vec,
+        )
+
+    def get_earth_angle(self, vec=None):
+        return self._get_angle("earth", vec=vec)
+
+    @cached_property
+    def sun_angle(self):
+        return self._get_angle("sun")
+
+    @cached_property
+    def earth_illumination(self):
+        return ps.get_earth_illumination(self.time)
+
+    @cached_property
+    def visda_keepout(self):
+        earth_illum = self.earth_illumination
+        keepout = np.ones(len(earth_illum)) * 75
+        keepout[earth_illum.value < 90] = (
+            2.5 * (90 - earth_illum[earth_illum.value < 90].value) + 105
+        )
+        keepout[keepout > 135] = 135
+        return keepout * u.deg
+
+    @cached_property
+    def nirda_keepout(self):
+        earth_illum = self.earth_illumination
+        keepout = np.ones(len(earth_illum)) * 75
+        keepout[earth_illum.value < 90] = (
+            2.5 * (90 - earth_illum[earth_illum.value < 90].value) + 80.5
+        )
+        keepout[keepout > 135] = 135
+        return keepout * u.deg
+
+    @cached_property
+    def catalog_params(self):
+        with gaiaoffline.Gaia(
+            tmass_crossmatch=True, photometry_output="magnitude"
+        ) as gaia:
+            df = gaia.conesearch(self.targ_ra, self.targ_dec, 0.1).reset_index(
+                drop=True
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            coords = SkyCoord(
+                ra=df["ra"].values * u.deg,
+                dec=df["dec"].values * u.deg,
+                pm_ra_cosdec=df["pmra"].fillna(0).values * u.mas / u.year,
+                pm_dec=df["pmdec"].fillna(0).values * u.mas / u.year,
+                obstime=Time.strptime("2016", "%Y"),
+                distance=Distance(
+                    parallax=df["parallax"].fillna(0).values * u.mas,
+                    allow_negative=True,
+                ),
+                radial_velocity=df["radial_velocity"].fillna(0).values
+                * u.km
+                / u.s,
+            ).apply_space_motion(self.start_time)
+        df = df.iloc[coords.separation(self.coord).argmin()]
+        return df.to_dict()

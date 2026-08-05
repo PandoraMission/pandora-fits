@@ -12,7 +12,6 @@ DPC_KEYS = {
     "jd": "FLOAT",
     "date": "STR",
     "exptime": "FLOAT",
-    "dpc_seq_id": "INT",
     "dpc_hash_key": "TEXT",
     "start": "FLOAT",
     "instrmnt": "TEXT",

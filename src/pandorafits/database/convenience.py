@@ -2,6 +2,7 @@
 import logging
 import os
 import shutil
+from pathlib import Path
 
 # Third-party
 import numpy as np
@@ -9,6 +10,7 @@ import pandas as pd
 
 from .. import (
     CRSOFTVER,
+    DATA_DIR,
     LEVEL0_DIR,
     LEVEL1_DIR,
     LEVEL2_DIR,
@@ -28,6 +30,7 @@ __all__ = [
     "delete_astrometrydatabase",
     "update_astrometrydatabase",
     "update_level0database",
+    "update_level1database",
     "delete_level0database",
     "delete_level1database",
     "delete_level2database",
@@ -38,6 +41,7 @@ __all__ = [
     "delete_logs",
     "delete_all",
     "get_status",
+    "get_sizes",
     "get_level_database",
     "get_astrometry_database",
     "get_target_database",
@@ -91,20 +95,28 @@ def delete_astrometrydatabase() -> None:
         )
 
 
-def update_astrometrydatabase() -> None:
+def update_astrometrydatabase(match_str="") -> None:
     """
     Creates and updates to the SQLite database file.
     """
     with AstrometryDataBase() as db:
-        db.crawl_and_add()
+        db.crawl_and_add(match_str=match_str)
 
 
-def update_level0database() -> None:
+def update_level0database(match_str="") -> None:
     """
     Creates and updates to the SQLite database file.
     """
     with Level0DataBase() as db:
-        db.crawl_and_add()
+        db.crawl_and_add(match_str=match_str)
+
+
+def update_level1database() -> None:
+    """
+    Creates and updates to the SQLite database file.
+    """
+    with Level1DataBase() as db:
+        db.crawl_and_process()
 
 
 def delete_level0database() -> None:
@@ -284,6 +296,8 @@ def get_status():
         return nrows
 
     def get_nbadcrsoftver(name):
+        if name in ["AstrometryDataBase"]:
+            return None
         with globals()[name]() as self:
             self.cur.execute(
                 f"""SELECT COUNT() FROM {self.table_name} WHERE crsoftver != ?""",
@@ -293,6 +307,8 @@ def get_status():
         return nrows
 
     def get_nbadpfsoftver(name):
+        if name in ["AstrometryDataBase"]:
+            return None
         with globals()[name]() as self:
             self.cur.execute(
                 f"""SELECT COUNT() FROM {self.table_name} WHERE pfsoftver != ?""",
@@ -302,6 +318,8 @@ def get_status():
         return nrows
 
     def get_nbadchecksum(name):
+        if name in ["AstrometryDataBase"]:
+            return None
         with globals()[name]() as self:
             self.cur.execute(
                 f"""SELECT COUNT() FROM {self.table_name} WHERE badchecksum != ?""",
@@ -311,6 +329,8 @@ def get_status():
         return nrows
 
     def get_nbaddatasum(name):
+        if name in ["AstrometryDataBase"]:
+            return None
         with globals()[name]() as self:
             self.cur.execute(
                 f"""SELECT COUNT() FROM {self.table_name} WHERE baddatasum != ?""",
@@ -318,6 +338,11 @@ def get_status():
             )
             nrows = self.cur.fetchone()[0]
         return nrows
+
+    def get_size(name):
+        with globals()[name]() as self:
+            size = self.size
+        return np.round(size, 1)
 
     names = [
         "AstrometryDataBase",
@@ -331,10 +356,59 @@ def get_status():
         "n_bad_datasum": [get_nbaddatasum(name) for name in names],
         "n_unique_targets": [get_ntargets(name) for name in names],
         "n_unique_pointings": [get_npointings(name) for name in names],
+        "db_size": [get_size(name) for name in names],
     }
     status = pd.DataFrame.from_dict(r).T
     status.columns = names
     return status
+
+
+def get_sizes():
+    def get_dir_size(path):
+        if os.path.isdir(path):
+            size_bytes = sum(
+                p.stat().st_size for p in Path(path).rglob("*") if p.is_file()
+            )
+            size_gb = size_bytes / 1024**3
+            return size_gb
+        return 0
+
+    def get_file_size(path):
+        if os.path.isfile(path):
+            return os.path.getsize(path) / (1024**3)
+        return 0
+
+    res = {
+        "raw_data": get_dir_size(DATA_DIR),
+        "level1_data": get_dir_size(LEVEL1_DIR),
+        "level2_data": get_dir_size(LEVEL2_DIR),
+        "level3_data": get_dir_size(LEVEL3_DIR),
+        "astrometry_database": get_file_size(
+            os.path.join(LEVEL0_DIR, "astrometry.db")
+        ),
+        "level0_database": get_file_size(
+            os.path.join(LEVEL0_DIR, "level0.db")
+        ),
+        "level1_database": get_file_size(
+            os.path.join(LEVEL1_DIR, "level1.db")
+        ),
+        "level2_database": get_file_size(
+            os.path.join(LEVEL2_DIR, "level2.db")
+        ),
+        "level3_database": get_file_size(
+            os.path.join(LEVEL3_DIR, "level3.db")
+        ),
+    }
+
+    res["level1_data"] -= res["level1_database"]
+    res["level2_data"] -= res["level2_database"]
+    res["level2_data"] -= res["level3_database"]
+    return (
+        pd.DataFrame(res.items())
+        .rename({0: "object", 1: "size_gb"}, axis="columns")
+        .set_index("object")
+        .round(1)
+    )
 
 
 def get_level_database(level, **kwargs):

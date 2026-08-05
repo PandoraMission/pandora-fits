@@ -3316,23 +3316,23 @@ files = [
 
 [[package]]
 name = "lamatrix"
-version = "1.0.1"
+version = "1.0.3"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main"]
 files = [
-    {file = "lamatrix-1.0.1-py3-none-any.whl", hash = "sha256:ef59a19c3743a7672406fcfaec88d4bff6665b4e13713749d4ba85a83c2b63b9"},
-    {file = "lamatrix-1.0.1.tar.gz", hash = "sha256:64c476fa58d88c9e0457da95e9bdcabd27e72fe0ccaa6dd3572393e99655a511"},
+    {file = "lamatrix-1.0.3-py3-none-any.whl", hash = "sha256:9580a15f1fb734a48a624ff428867fe72e81de301e1dedcede5f422bb5a5ab47"},
+    {file = "lamatrix-1.0.3.tar.gz", hash = "sha256:8f31883a9da34cad1228c69fb47fb8c13fe18052a0572d802f29f3092b90d2ee"},
 ]
 
 [package.dependencies]
-numpy = ">=1.26.4,<2.0.0"
-rich = ">=13.7.1,<14.0.0"
+numpy = ">=1.24"
+rich = ">13.7.1"
 scipy = ">=1.3"
 
 [package.extras]
-ffi = ["astropy (>=5.0.0)", "lkspacecraft (>=1.0.5)", "sparse3d (>1.0.0)"]
+ffi = ["astropy (>=5.0.0)", "gaiaoffline (>=1.0.3,<2.0.0)", "lkspacecraft (>=1.0.5)", "sparse3d (>1.0.0)"]
 
 [[package]]
 name = "lark"
@@ -4808,14 +4808,14 @@ files = [
 
 [[package]]
 name = "pandoraaperture"
-version = "0.1.14"
+version = "0.2.0"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "pandoraaperture-0.1.14-py3-none-any.whl", hash = "sha256:6453b3bedd3ca0408a7e3c0616c0c1f54e9255ebc02fbae4a3266b9ead7ba1ce"},
-    {file = "pandoraaperture-0.1.14.tar.gz", hash = "sha256:03de5615b8ed0caaf151f85e5f8365cb1bf7d9778cc52f0f63de03b364b5ec75"},
+    {file = "pandoraaperture-0.2.0-py3-none-any.whl", hash = "sha256:0f2abcb3aac10a9e998e1009bb051eca28f42b92f12e30c7f4357390b05a8701"},
+    {file = "pandoraaperture-0.2.0.tar.gz", hash = "sha256:ecdda0f8d030cd4ba05254fe2e4f30d2db1aca43b1335cc4ab9d1195029bd1c8"},
 ]
 
 [package.dependencies]
@@ -4825,20 +4825,20 @@ gaiaoffline = ">=1.0.3,<2.0.0"
 matplotlib = ">=2.0.0"
 numpy = ">=1.2"
 pandas = ">=2.2.3,<3.0.0"
-pandoraref = ">=0.3.0"
+pandoraref = ">=2.3.2"
 rich = ">=13.9.4,<14.0.0"
 sparse3d = ">=1.2.10"
 
 [[package]]
 name = "pandoraref"
-version = "2.1.0"
+version = "2.6.0"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main", "dev"]
 files = [
-    {file = "pandoraref-2.1.0-py3-none-any.whl", hash = "sha256:d4b915e30ab7cacac6b8d52d982627c6221da3d991a6bc0d31cc17106e80aa3f"},
-    {file = "pandoraref-2.1.0.tar.gz", hash = "sha256:43297431a67628e8e73c037f9f7bb480a2a172c4033643ce56ebb60eca5c2be2"},
+    {file = "pandoraref-2.6.0-py3-none-any.whl", hash = "sha256:58384173de90427b6d8a1dcd7a8fa88e3310961fc1716ec33e97df4613939188"},
+    {file = "pandoraref-2.6.0.tar.gz", hash = "sha256:66e0770a89c8c51abe379cb71d0f5351cdd52d0d80dab84c8ec05c2a477de38e"},
 ]
 
 [package.dependencies]
@@ -4880,14 +4880,14 @@ tqdm = ">=4.60.1"
 
 [[package]]
 name = "pandoraspacecraft"
-version = "1.1.9"
+version = "1.2.3"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main", "dev"]
 files = [
-    {file = "pandoraspacecraft-1.1.9-py3-none-any.whl", hash = "sha256:5ab28a41b1e8df08bea55319aeed72c925d5ac59ad779a297a4a9512ed831b98"},
-    {file = "pandoraspacecraft-1.1.9.tar.gz", hash = "sha256:f8f5795ddc2ef59672ca06af1b4f27f78891d93ecc1ffd7d2614c7f82e37681a"},
+    {file = "pandoraspacecraft-1.2.3-py3-none-any.whl", hash = "sha256:6fb471083c74d43d8096307250502c3862496d54d4ed203e32d313f75d79935b"},
+    {file = "pandoraspacecraft-1.2.3.tar.gz", hash = "sha256:21adf342f16990d0a4233f7685162f7fef9cb7dd457875e07ecc5afc4cf16bd4"},
 ]
 
 [package.dependencies]
@@ -7555,4 +7555,4 @@ database = ["fitsio"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "9da237002ed4ffb7742aa455b6edced1b4d6218d260bfe67c4cc8041b0867c0f"
+content-hash = "98da8fc4b4a01826377669c2a76724f20b9ac65b260fc58408dfb74e464f7c90"

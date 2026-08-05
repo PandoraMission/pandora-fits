@@ -2,6 +2,7 @@ sandbox
 llnl/
 ~$*.xlsx
 trash/
+tests/dummyfiles
 
 # Mac things
 .DS_Store
