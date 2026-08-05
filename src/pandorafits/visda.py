@@ -13,6 +13,7 @@ from astropy.time import Time
 from . import FORMATSDIR, VISDAPRF, VISDAReference, logger
 from .fits import PandoraHDUList
 from .io import register_hdulist
+from .utils import convert_time
 from .report import ReportMixins
 from .reshape import array_to_panels, panels_to_array, panels_to_cube
 
@@ -354,8 +355,8 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
         t = self.time.jd
         df["t"] = t
         df["sep"] = np.hypot(
-            df.avg_ra.values - self.targ.ra.value,
-            df.avg_dec.values - self.targ.dec.value,
+            df.avg_ra.values - self.targ_ra,
+            df.avg_dec.values - self.targ_dec,
         )
         df["count"] = count
         df["missing"] = missing
