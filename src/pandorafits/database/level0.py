@@ -245,7 +245,7 @@ class Level0DataBase(DataBaseMixins):
 
     def crawl_and_add(self, match_str=""):
         root = DATA_DIR
-        for image_type in ["InfImg", "VisSci", "VisImg"]:
+        for image_type in ["InfImg", "VisSci"]:
             # for path in Path(root).rglob(f"*{image_type}*.fits"):
             #     self.add_entry(self.get_entry(str(path)))
             paths = np.sort(
@@ -256,7 +256,7 @@ class Level0DataBase(DataBaseMixins):
                         if match_str != ""
                         else f"*{image_type}*.fits"
                     )
-                    if not self.check_filename_in_database(str(path))
+                    if self.check_filename_needs_processing(str(path))
                 ]
             )
             path_idxs = np.unique(
@@ -353,7 +353,7 @@ class Level0DataBase(DataBaseMixins):
                 FROM {self.table_name} AS v
                 JOIN {self.table_name} AS n
                 ON v.targ_id = n.targ_id
-                AND n.jd BETWEEN v.jd - 0.001 AND v.jd + 0.001
+                AND n.jd BETWEEN v.jd - 0.005 AND v.jd + 0.002
                 WHERE v.instrmnt = 'VISDA'
                 AND n.instrmnt = 'NIRDA'
             )

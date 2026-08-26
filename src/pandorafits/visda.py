@@ -9,8 +9,9 @@ import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
 from astropy.time import Time
+from pandoraref import __version__ as prversion
 
-from . import FORMATSDIR, VISDAPRF, VISDAReference, logger
+from . import FORMATSDIR, VISDAPRF, VISDAReference, __version__, logger
 from .fits import PandoraHDUList
 from .io import register_hdulist
 from .report import ReportMixins
@@ -64,6 +65,7 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
                 header=fits.Header([("UNIT", "second", "Exposure time unit")]),
             )
         )
+        self["SCIENCE"].header["UNIT"] = "ct"
         self[0].header["FIXED"] = True
         logger.info("Rearranged VISDA file.")
         return self
@@ -403,6 +405,32 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
     #     self.append(aperturehdu)
     #     logger.info("Appended scene extensions")
 
+    @property
+    def aperture(self):
+        if "APERTURE" not in self:
+            raise KeyError("No APERTURE extension available")
+        aper = self["APERTURE"].data & 2 == 2
+        bkg = self["APERTURE"].data & 4 == 0
+        return aper & bkg
+
+    @property
+    def bkg_aperture(self):
+        if "APERTURE" not in self:
+            raise KeyError("No APERTURE extension available")
+        return (self["APERTURE"].data == 0) & (self["QUALITY"].data == 0)
+
+    def get_bkg(self):
+        d = self["SCIENCE"].data
+        thumb = np.median(d, axis=0)
+        thumb -= np.median(np.ma.masked_array(thumb, self.aperture))
+        thumb /= 1.486 * np.nanmedian(
+            np.ma.masked_array(
+                np.hypot(*np.gradient(thumb * np.sqrt(2))), self.aperture
+            )
+        )
+        bkgaper = (thumb < 5) & (self.bkg_aperture)
+        return np.nanmedian(self["SCIENCE"].data[:, bkgaper], axis=1)
+
     def __to_l2__(self):
         return VISDALevel2HDUList(self)
 
@@ -439,6 +467,98 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
     prf = VISDAPRF
     level = 0
     instrument = "VISDA"
+
+    def fix(self):
+        for hdu in ["TIME", "EXPTIME"]:
+            if hdu in self:
+                self.pop(hdu)
+
+        self.append(
+            fits.ImageHDU(
+                self.time.jd,
+                name="TIME",
+                header=fits.Header([("FRAME", "JD", "Time frame is JD")]),
+            )
+        )
+        self.append(
+            fits.ImageHDU(
+                self.exptime.value,
+                name="EXPTIME",
+                header=fits.Header([("UNIT", "second", "Exposure time unit")]),
+            )
+        )
+        self["SCIENCE"].header["UNIT"] = "COUNTS"
+        self[0].header["FIXED"] = True
+        logger.info("Rearranged VISDA file.")
+        return self
+
+    def to_level1(self, upcast=True, **kwargs):
+        if self.level >= 1:
+            raise ValueError("This is a Level 1 Product.")
+        new = self.copy()
+        new = new.fix()
+
+        new[0].header["PFSOFTV"] = __version__
+        new[0].header["PRSOFTV"] = prversion
+        new[0].header["PFCLASS"] = new.__class__.__name__.replace(
+            f"{self.level}", f"{self.level + 1}"
+        )
+        new[0].header["PFTIME"] = (
+            Time.now().isot,
+            "Pandora DPC Processing Time",
+        )
+        if upcast:
+            new = new.__to_l1__()
+        return new
+
+    def to_level2(self, upcast=True, **kwargs):
+        if self.level == 0:
+            raise ValueError(
+                "This is a Level 0 Product, convert to Level 1 first."
+            )
+
+        if self.level >= 2:
+            raise ValueError("This is a Level 2 Product.")
+        new = self.copy()
+        new._append_quality()
+        new._subtract_bias()
+        new[0].header["PFSOFTV"] = __version__
+        new[0].header["PRSOFTV"] = prversion
+        new[0].header["PFCLASS"] = new.__class__.__name__.replace(
+            f"{self.level}", f"{self.level + 1}"
+        )
+        new[0].header["PFTIME"] = (
+            Time.now().isot,
+            "Pandora DPC Processing Time",
+        )
+        if upcast:
+            new = new.__to_l2__()
+        return new
+
+    @property
+    def nframes(self):
+        return self[0].header["FRMSCLCT"]
+
+    @property
+    def frame_time(self):
+        return self.read_time * self.ncoadds
+
+    @property
+    def time(self):
+        if "TIME" not in self:
+            dt = timedelta(seconds=self.frame_time.to(u.second).value)
+            return self.start_time + (np.arange(self.nframes) * dt)
+        else:
+            return Time(self["TIME"].data, format="jd")
+
+    @property
+    def exptime(self):
+        if "EXPTIME" not in self:
+            return np.ones(self.nframes) * self.frame_time.to(u.second)
+        else:
+            return u.Quantity(
+                self["EXPTIME"].data, unit=self["EXPTIME"].header["UNIT"]
+            )
 
     def plot_data(self, ax=None, **kwargs):
         if ax is None:
@@ -480,6 +600,10 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
 
     def __to_l1__(self):
         return VISDAFFILevel1HDUList(self)
+
+    @property
+    def ncoadds(self):
+        return 1
 
 
 @register_hdulist(

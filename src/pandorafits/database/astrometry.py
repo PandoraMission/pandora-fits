@@ -223,7 +223,7 @@ class AstrometryDataBase(DataBaseMixins):
                             if match_str != ""
                             else f"*{image_type}*.fits"
                         )
-                        if not self.check_filename_in_database(str(path))
+                        if self.check_filename_needs_processing(str(path))
                     ]
                 )
                 path_idxs = np.unique(

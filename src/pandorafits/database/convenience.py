@@ -31,6 +31,7 @@ __all__ = [
     "update_astrometrydatabase",
     "update_level0database",
     "update_level1database",
+    "update_level2database",
     "delete_level0database",
     "delete_level1database",
     "delete_level2database",
@@ -116,6 +117,14 @@ def update_level1database() -> None:
     Creates and updates to the SQLite database file.
     """
     with Level1DataBase() as db:
+        db.crawl_and_process()
+
+
+def update_level2database() -> None:
+    """
+    Creates and updates to the SQLite database file.
+    """
+    with Level2DataBase() as db:
         db.crawl_and_process()
 
 

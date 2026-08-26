@@ -8,13 +8,14 @@ from copy import deepcopy
 import astropy.units as u
 import numpy as np
 import pandoraaperture as pa
-from astropy.coordinates import SkyCoord
+
+# from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
 from astropy.time import Time
 from pandoraref import __version__ as prversion
 
-from . import NIRDAReference, __version__, logger
+from . import __version__, logger
 from .database import AstrometryDataBase, Level0DataBase
 
 
@@ -107,11 +108,32 @@ class ProcessingMixins:
         quality = self._get_reference_detector_image("bad_pixel")
         self.append(fits.CompImageHDU(quality, name="QUALITY"))
 
+    def _append_background(self):
+        logger.info("Appending background")
+        bkg = self.get_bkg()
+        self.append(
+            fits.CompImageHDU(
+                bkg,
+                name="BACKGROUND",
+                header=fits.Header([self["SCIENCE"].header.cards["UNIT"]]),
+            ),
+        )
+
     def _append_wavelength(self):
         logger.info("Appending wavelength")
-        dy = self.row[:, None] - self["VECTORS"].data["posy"]
-        wav = NIRDAReference.get_wavelength_from_position(dy).value
-        self.append(fits.CompImageHDU(wav.T, name="Wavelength"))
+        if "VECTORS" in self:
+            dy = self.row - np.nanmedian(self["VECTORS"].data["posy"])
+        else:
+            dy = self.row - np.ones(self[0].header["POSY"])
+        wav = self.reference.get_wavelength_from_position(dy)
+        sens = self.reference.get_spectrum_normalization_per_pixel(dy)
+        tab = Table(
+            data=[self.row * u.pixel, dy * u.pixel, wav, sens],
+            names=["row", "drow", "wavelength", "sensitivity"],
+        )
+        hdu = fits.convenience.table_to_hdu(tab)
+        hdu.header["EXTNAME"] = "WAVELENGTH_SOLUTION"
+        self.append(hdu)
 
     def _append_wcs(self):
         logger.info("Applying WCS")
@@ -120,8 +142,11 @@ class ProcessingMixins:
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
+                _, ra, dec, rot = self.astrometry
+                k = np.isfinite(ra) & np.isfinite(dec) & np.isfinite(rot)
+                k &= (ra != 0) & (dec != 0) & (rot != 0)
                 wcs = self.reference.get_wcs_from_VITL(
-                    *Table(self["ASTROMETRY"].data).to_pandas().median().values
+                    np.median(ra[k]), np.median(dec[k]), np.median(rot[k])
                 )
         else:
             with warnings.catch_warnings():
@@ -133,10 +158,12 @@ class ProcessingMixins:
                     hdr["Dec"] if "Dec" in hdr else 0,
                     hdr["Roll"] if "Roll" in hdr else 0,
                 )
-        wcs_hdr = wcs.to_header(relax=True)
-        self[1].header.extend(wcs_hdr)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            wcs_hdr = wcs.to_header(relax=True)
+            self[1].header.extend(wcs_hdr)
         x, y = wcs.world_to_pixel(self.coord)
-        self[0].header["POS_X"], self[0].header["POS_Y"] = (
+        self[0].header["POSX"], self[0].header["POSY"] = (
             (float(x), "X [column] Pixel position of target"),
             (float(y), "Y [row] Pixel position of target"),
         )
@@ -159,9 +186,28 @@ class ProcessingMixins:
 
     def _append_vectors(self):
         df = self.get_position_data()
-        df["posx"], df["posy"] = self.wcs.world_to_pixel(
-            SkyCoord(df.avg_ra.values, df.avg_dec.values, unit="deg")
-        )
+
+        # These need to be replaced with the instantaneous WCS
+        # df["posx"], df["posy"] = self.wcs.world_to_pixel(
+        #     SkyCoord(df.avg_ra.values, df.avg_dec.values, unit="deg")
+        # )
+        df["posx"] = np.nan
+        df["posy"] = np.nan
+
+        for tdx in range(len(df)):
+            if (
+                not np.isfinite(df.avg_ra[tdx])
+                & np.isfinite(df.avg_dec[tdx])
+                & np.isfinite(df.avg_rot[tdx])
+            ):
+                continue
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                wcs = self.reference.get_wcs_from_VITL(
+                    df.avg_ra[tdx], df.avg_dec[tdx], df.avg_rot[tdx]
+                )
+            df.loc[tdx, ["posx", "posy"]] = wcs.world_to_pixel(self.coord)
+
         posx, posy = self.wcs.world_to_pixel(self.coord)
         df["posx"] = df["posx"].fillna(posx)
         df["posy"] = df["posy"].fillna(posy)
@@ -207,35 +253,46 @@ class ProcessingMixins:
 
         time_range = (self.start_time.jd - 0.00001, self.end_time.jd + 0.00001)
         with Level0DataBase() as db:
-            df = db.to_pandas(time_range=time_range, instrmnt=self.instrument)
-
+            df = db.to_pandas(
+                time_range=time_range,
+                instrmnt=self.instrument,
+                targ_id=self.targ_id,
+            )
         if len(df) != 0:
             k = ~df["targ_ra"].isin([None])
             if k.any():
                 targ_ra = df.loc[k, "targ_ra"].mode()[0]
             else:
+                raise ValueError("No pointing information available")
                 targ_ra = 0
             k = ~df["targ_dec"].isin([None])
             if k.any():
                 targ_dec = df.loc[k, "targ_dec"].mode()[0]
             else:
+                raise ValueError("No pointing information available")
                 targ_dec = 0
             k = ~df["ra"].isin([None])
             if k.any():
                 ra = df.loc[k, "ra"].mode()[0]
             else:
+                raise ValueError("No pointing information available")
+
                 ra = 0
             k = ~df["dec"].isin([None])
             if k.any():
                 dec = df.loc[k, "dec"].mode()[0]
             else:
+                raise ValueError("No pointing information available")
+
                 dec = 0
             k = ~df["roll"].isin([None])
             if k.any():
                 roll = df.loc[k, "roll"].mode()[0]
             else:
+                raise ValueError("No pointing information available")
                 roll = 0
         else:
+            raise ValueError("No pointing information available")
             targ_ra, targ_dec, ra, dec, roll = 0, 0, 0, 0, 0
 
         if len(df) > 0:
@@ -295,7 +352,10 @@ class ProcessingMixins:
     def _update_astrometry_extension(self):
         # For finding targets we tolerate any files that are taken during the same observation or within 30s of the observation.
         if "ASTROMETRY" in self:
+            hdr = self["ASTROMETRY"].header
             self.pop("ASTROMETRY")
+        else:
+            hdr = None
         if "TEMP_TIME" in self:
             self.pop("TEMP_TIME")
         time_buffer = 30.0 / 86400.0
@@ -324,6 +384,8 @@ class ProcessingMixins:
             Table.from_pandas(ast_tab.fillna(np.nan))
         )
         ast_tab.header.extend(fits.Header([("EXTNAME", "ASTROMETRY", "")]))
+        if hdr is not None:
+            ast_tab.header.extend([h for h in hdr.cards])
         self.append(ast_tab)
 
     def _update_catalog_params(self):
@@ -384,26 +446,66 @@ class ProcessingMixins:
             self[0].header["ROISTRTY"],
             self[0].header["ROISTRTX"],
         )
-        scene = pa.SkyScene(self.prf, self.wcs)
+        if self.instrument == "NIRDA":
+            pixel_buffer = (230, 30)
+        else:
+            pixel_buffer = (30, 30)
+        scene = pa.SkyScene(
+            self.prf, self.wcs, self.start_time, pixel_buffer=pixel_buffer
+        )
+
+        # scene = pa.SkyScene(self.prf, self.wcs, self.start_time)
+
         if len(scene.cat) == 0:
             raise ValueError("Can not find catalog stars")
         # Delta pos is a bit of a hack, it seems like input PSF model is OBO
-        hdu = scene.get_aperture_hdu(self.coord, delta_pos=(1, 1))
+        hdu = scene.get_aperture_hdu(self.coord, delta_pos=(0, 0))
         self.append(hdu)
-        hdu = scene.get_model_hdu(delta_pos=(1, 1))
+        hdu = scene.get_model_hdu(delta_pos=(0, 0))
         self.append(hdu)
 
     def to_level1(self, upcast=True, **kwargs):
         if self.level >= 1:
             raise ValueError("This is a Level 1 Product.")
         new = self.copy()
-        if "NIRDALevel0HDUList" in self.__class__.__name__:
-            new.difference_sample()
-        else:
-            new.fix()
-        new._update_pointing_params()
+        new = new.fix()
 
-        if "VISDALevel0HDUList" in new.__class__.__name__:
+        new[0].header["PFSOFTV"] = __version__
+        new[0].header["PRSOFTV"] = prversion
+
+        # This header keyword set isn't fitting in FITS conventions so we're renaming them if present.
+        # We switch it out to "UNIT"
+        for key in ["TTYPE1", "TFORM1", "TUNIT1"]:
+            if key in new[1].header:
+                new[1].header.remove(key)
+
+        new[0].header["PFCLASS"] = new.__class__.__name__.replace(
+            f"{self.level}", f"{self.level + 1}"
+        )
+        new[0].header["PFTIME"] = (
+            Time.now().isot,
+            "Pandora DPC Processing Time",
+        )
+
+        if upcast:
+            new = new.__to_l1__()
+        return new
+
+    def to_level2(self, upcast=True, **kwargs):
+        if self.level == 0:
+            raise ValueError(
+                "This is a Level 0 Product, convert to Level 1 first."
+            )
+
+        if self.level >= 2:
+            raise ValueError("This is a Level 2 Product.")
+        new = self.copy()
+        new._update_pointing_params()
+        new._append_wcs()
+        new._update_astrometry_extension()
+        new._update_catalog_params()
+
+        if "VISDALevel1HDUList" in new.__class__.__name__:
             new = new.split_target()
             new.pop("STAR_TABLE")
             new[0].header["ROISTRTX"] = (
@@ -418,83 +520,31 @@ class ProcessingMixins:
             new[0].header["ROISIZEY"] = new[0].header["STARDIMS"]
             new.pop("ROI_TABLE")
             new._append_wcs()
-        else:
-            new._append_wcs()
-
-        new[0].header["PFSOFTV"] = __version__
-        new[0].header["PRSOFTV"] = prversion
-
-        # This header keyword set isn't fitting in FITS conventions so we're renaming them if present.
-        # We switch it out to "UNIT"
-        for key in ["TTYPE1", "TFORM1", "TUNIT1"]:
-            if key in new[1].header:
-                new[1].header.remove(key)
-
-        new._update_astrometry_extension()
-        new._update_catalog_params()
-        new._append_vectors()
-        new._append_quality()
-        if "NIRDALevel0HDUList" in self.__class__.__name__:
-            new._append_wavelength()
-        # new._append_aperture_extension()
-
-        new[0].header["PFCLASS"] = new.__class__.__name__.replace(
-            f"{self.level}", f"{self.level + 1}"
-        )
-        new[0].header["PFTIME"] = (
-            Time.now().isot,
-            "Pandora DPC Processing Time",
-        )
-        if "VISDALevel0HDUList" in self.__class__.__name__:
+            new._subtract_bias()
             new["SCIENCE"] = fits.CompImageHDU(
-                new["SCIENCE"].data,
+                new["SCIENCE"].data / new.exptime[:, None, None].value,
                 name="SCIENCE",
                 header=new["SCIENCE"].header,
             )
-            new["SCIENCE"].header["UNIT"] = "COUNTS"
+            new["SCIENCE"].header["UNIT"] = "ct / s"
+            new._append_vectors()
+            # vectors update wcs
+            new._append_wcs()
+            new._append_quality()
 
-        if upcast:
-            new = new.__to_l1__()
-        return new
+        elif "NIRDALevel1HDUList" in new.__class__.__name__:
+            new = new.difference_sample()
+            new._append_vectors()
+            # vectors update wcs
+            new._append_wcs()
+            new._append_quality()
+            new._append_wavelength()
 
-    def to_level2(self, upcast=True, **kwargs):
-        if self.level >= 2:
-            raise ValueError("This is a Level 2 Product.")
-        new = self.copy()
-        new._cast_to_float()
-        new._subtract_bias()
-        new._subtract_dark()
-        new._divide_flat()
-        new._multiply_gain()
-        new._append_quality()
-        new._append_wcs()
-        new._append_scene_extensions()
-        new._append_error_extension()
-
-        if self.instrument == "NIRDA":
-            pix = new.row - new["catalog"].data["row"][0]
-            wav = NIRDAReference.get_wavelength_position(pix)
-            sens = NIRDAReference.get_spectrum_normalization_per_pixel(pix)
-
-            wavtab = fits.TableHDU.from_columns(
-                [
-                    fits.Column(
-                        "wavelength",
-                        "D",
-                        array=wav.value,
-                        unit=wav.unit.to_string(),
-                    ),
-                    fits.Column(
-                        "sensitivity",
-                        "D",
-                        array=sens.value,
-                        unit=sens.unit.to_string(),
-                    ),
-                ],
-                name="WAVELENGTH",
-            )
-            new.append(wavtab)
-
+        new._append_aperture_extension()
+        new._append_background()
+        new._score_file()
+        new[0].header["PFSOFTV"] = __version__
+        new[0].header["PRSOFTV"] = prversion
         new[0].header["PFCLASS"] = new.__class__.__name__.replace(
             f"{self.level}", f"{self.level + 1}"
         )
@@ -506,3 +556,53 @@ class ProcessingMixins:
         if upcast:
             new = new.__to_l2__()
         return new
+
+    # def to_level2(self, upcast=True, **kwargs):
+    #     if self.level >= 2:
+    #         raise ValueError("This is a Level 2 Product.")
+    #     new = self.copy()
+    #     new._cast_to_float()
+    #     new._subtract_bias()
+    #     new._subtract_dark()
+    #     new._divide_flat()
+    #     new._multiply_gain()
+    #     new._append_quality()
+    #     new._append_wcs()
+    #     new._append_scene_extensions()
+    #     new._append_error_extension()
+
+    #     if self.instrument == "NIRDA":
+    #         pix = new.row - new["catalog"].data["row"][0]
+    #         wav = NIRDAReference.get_wavelength_position(pix)
+    #         sens = NIRDAReference.get_spectrum_normalization_per_pixel(pix)
+
+    #         wavtab = fits.TableHDU.from_columns(
+    #             [
+    #                 fits.Column(
+    #                     "wavelength",
+    #                     "D",
+    #                     array=wav.value,
+    #                     unit=wav.unit.to_string(),
+    #                 ),
+    #                 fits.Column(
+    #                     "sensitivity",
+    #                     "D",
+    #                     array=sens.value,
+    #                     unit=sens.unit.to_string(),
+    #                 ),
+    #             ],
+    #             name="WAVELENGTH",
+    #         )
+    #         new.append(wavtab)
+
+    #     new[0].header["PFCLASS"] = new.__class__.__name__.replace(
+    #         f"{self.level}", f"{self.level + 1}"
+    #     )
+    #     new[0].header["PFTIME"] = (
+    #         Time.now().isot,
+    #         "Pandora DPC Processing Time",
+    #     )
+
+    #     if upcast:
+    #         new = new.__to_l2__()
+    #     return new

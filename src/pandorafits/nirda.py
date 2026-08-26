@@ -98,9 +98,11 @@ class NIRDALevel0HDUList(PandoraHDUList):
     level = 0
     instrument = "NIRDA"
 
-    def _update_data(self, data, time, exptime, integrations):
+    def _update_data(self, data, time, exptime, integrations, hdr1):
         """Helper function to update data when we sample"""
-        self["SCIENCE"] = fits.CompImageHDU(data.value, name="SCIENCE")
+        self["SCIENCE"] = fits.CompImageHDU(
+            data.value, name="SCIENCE", header=hdr1
+        )
         self["SCIENCE"].header["UNIT"] = data.unit.to_string()
         for hdu in ["TIME", "EXPTIME", "INTEGRATION"]:
             if hdu in self:
@@ -171,7 +173,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
         ).to(u.second)
         I, _, _ = np.mgrid[: hdr["INTEGRTS"], : hdr["GRPS"], : hdr["READS"]]
 
-        if hdr["GRPSAVGD"]:
+        if hdr["GRPSAVGD"] == 1:
             t = t[:, :, 0][:, :, None]
             exptime = exptime.mean(axis=2)[:, :, None]
             I = I[:, :, 0][:, :, None]
@@ -179,7 +181,9 @@ class NIRDALevel0HDUList(PandoraHDUList):
         else:
             data = data.reshape(shape)
 
-        self._update_data((data * u.count), t, exptime, I)
+        hdr1 = self[1].header
+        self._update_data((data * u.count), t, exptime, I, hdr1)
+
         self[0].header["FIXED"] = True
         logger.info("Rearranged NIRDA file.")
         return self
@@ -226,6 +230,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
                 t = self["TIME"].data[:, 0, :]
                 d = self["SCIENCE"].data.astype(float)[:, 0, :]
 
+        hdr1 = self[1].header
         self._update_data(
             ((d[:, -1] - d[:, 0]) * u.count)
             / (
@@ -236,6 +241,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
             (exptime[:, -1] - exptime[:, 0])
             * u.Quantity(1, self["EXPTIME"].header["unit"]),
             i[:, 1],
+            hdr1=hdr1,
         )
         self[0].header["COLLAPS"] = 1
         logger.info("Fowlered sampled NIRDA file.")
@@ -265,6 +271,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
             raise ValueError(
                 "Can not difference sample when integrations contain a single resultant read frame."
             )
+        hdr1 = self[1].header
         self._update_data(
             d
             * u.count
@@ -275,6 +282,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
             Time(t, format="jd"),
             exptime * u.Quantity(1, self["EXPTIME"].header["unit"]),
             i,
+            hdr1=hdr1,
         )
         self[0].header["COLLAPS"] = 1
         logger.info("Difference sampled NIRDA file.")
@@ -434,6 +442,44 @@ class NIRDALevel1HDUList(NIRDALevel0HDUList):
     #     )
     #     self[0].header["GAIA_ID"] = self["APERTURE"].header["GAIA_ID"]
     #     logger.info("Appended scene extensions")
+
+    @property
+    def aperture(self):
+        if "APERTURE" not in self:
+            raise KeyError("No APERTURE extension available")
+        aper = self["APERTURE"].data & 2 == 2
+        q = self["QUALITY"].data == 0
+        bkg = self["APERTURE"].data & 4 == 0
+        ok_column = ((bkg & q) * (aper & q)).sum(axis=1) == aper.sum(axis=1)
+        return aper & ok_column[:, None]
+
+    @property
+    def bkg_aperture(self):
+        if "APERTURE" not in self:
+            raise KeyError("No APERTURE extension available")
+        return (self["APERTURE"].data == 0) & (self["QUALITY"].data == 0)
+
+    def get_bkg(self):
+        d = self["SCIENCE"].data
+        thumb = np.median(d, axis=0)
+        thumb -= np.median(np.ma.masked_array(thumb, self.aperture))
+        thumb /= 1.486 * np.nanmedian(
+            np.ma.masked_array(
+                np.hypot(*np.gradient(thumb * np.sqrt(2))), self.aperture
+            )
+        )
+        bkgaper = (thumb < 5) & (self.bkg_aperture)
+        bkgaper[:2] = False
+        bkgaper[-2:] = False
+        bkgaper[:, :2] = False
+        bkgaper[:, -2:] = False
+        bkg = np.nanmedian(
+            np.ma.masked_array(
+                d, (~self.bkg_aperture[None, :, :]) * np.ones(d.shape, bool)
+            ),
+            axis=2,
+        )
+        return bkg
 
     def __to_l2__(self):
         return NIRDALevel2HDUList(self)

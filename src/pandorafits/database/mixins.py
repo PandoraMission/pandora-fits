@@ -14,6 +14,7 @@ from astropy.time import Time
 
 from .. import logger  # noqa
 from .. import LEVEL0_DIR, LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR  # noqa
+from . import BANSTRINGS
 
 
 def _process_time(time):
@@ -135,13 +136,16 @@ class DataBaseMixins:
 
         return pd.read_sql_query(sql, self.conn, params=params)
 
-    def check_filename_in_database(self, filename):
+    def check_filename_needs_processing(self, filename):
         fname = Path(filename).name
+        if np.any([ban in fname for ban in BANSTRINGS]):
+            # Automatically skip
+            return False
         self.cur.execute(
             f"SELECT 1 FROM {self.table_name} WHERE filename=?",
             (fname,),
         )
-        return self.cur.fetchone() is not None
+        return self.cur.fetchone() is None
 
     def get_status(self):
         sql = f"""SELECT jd FROM {self.table_name} ORDER BY jd LIMIT 1;"""

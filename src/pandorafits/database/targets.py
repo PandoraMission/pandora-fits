@@ -155,7 +155,7 @@ class TargetDataBase(DataBaseMixins):
             paths = [
                 str(path)
                 for path in Path(root).rglob(f"*{cal_type}*.xml")
-                if not self.check_filename_in_database(str(path))
+                if self.check_filename_needs_processing(str(path))
             ]
             rows = []
             for path in paths:

@@ -1,5 +1,20 @@
 """Submodule for working with file database."""
 
+# This strings ban files from being processed.
+# If a filename contains these strings it will be automatically skipped everywhere.
+BANSTRINGS = [
+    "PENGUIN",
+    "2025-",
+    "2026-01",
+    "2026-02",
+    "2026-03",
+    "2026-04",
+    "2026-05",
+    # "2026-06",
+    # "2026-07-0",
+    # "2026-07-1",
+]
+
 DPC_KEYS = {
     "filename": "TEXT PRIMARY KEY",
     "lvlfilename": "TEXT",

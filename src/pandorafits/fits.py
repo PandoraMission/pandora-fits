@@ -56,6 +56,8 @@ class FITSValueException(Exception):
 def _clean_header_cards(hdr: fits.Header):
     """Cleans the list of cards to ensure they have reasonable values."""
     for key in hdr:
+        if key == "":
+            continue
         if key in SKIPKWS:
             continue
         if hdr[key] in ["TRUE", "True", "T"]:
@@ -166,7 +168,9 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                                 f"[EXT {hdu.header['EXTNAME']}] Data doesn't match format for {self.__class__.__name__}."
                                 f" Expected data type of np.uint32, got {hdu.data.dtype}"
                             )
-                    if int(expected_header["bitpix"]) == -64:
+                    if (int(expected_header["bitpix"]) == -64) | (
+                        int(expected_header["bitpix"]) == 64
+                    ):
                         continue
                     else:
                         raise FITSTemplateException(
@@ -531,7 +535,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                         for c in ["RightAscension", "Declination", "Rotation"]
                     ]
                 )
-                et = self[3].data["ExposureStartTime_us"]
+                et = self["TEMP_TIME"].data["ExposureStartTime_us"]
                 et = et[: len(ra)]
                 if et[-1] > 2**60:
                     et = et[:-1]
@@ -739,3 +743,121 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
             ).apply_space_motion(self.start_time)
         df = df.iloc[coords.separation(self.coord).argmin()]
         return df.to_dict()
+
+    def _score_file(self):
+        mid = np.asarray(
+            np.unravel_index(
+                np.argmin(
+                    np.hypot(
+                        self.column[None, :] - self[0].header["posx"],
+                        self.row[:, None] - self[0].header["posy"],
+                    )
+                ),
+                (self.row.shape[0], self.column.shape[0]),
+            )
+        ).astype(float)
+        mid[0] -= self.row.shape[0] / 2
+        mid[1] -= self.column.shape[0] / 2
+
+        useable = (
+            np.isfinite(self["VECTORS"].data["avg_ra"])
+            & (
+                self["VECTORS"].data["jd"]
+                > (self["VECTORS"].data["jd"][0] + (5 / (24 * 60)))
+            )
+            & self["VECTORS"].data["visda_keepout"]
+            & self["VECTORS"].data["nirda_keepout"]
+            & (self["VECTORS"].data["target_sep"] < (10 / 3600))
+            & (
+                np.abs(
+                    (
+                        self["VECTORS"].data["target_sep"]
+                        - np.nanmedian(self["VECTORS"].data["target_sep"])
+                    )
+                )
+                < (10 / 3600)
+            )
+        )
+        k = np.isfinite(self["VECTORS"].data["avg_ra"])
+        cards = [
+            ("SRT_DATE", self.start_time.isot, "File Start Date"),
+            ("END_DATE", self.end_time.isot, "File End Date"),
+            (
+                "FILETIME",
+                (self.end_time - self.start_time).to(u.minute).value,
+                "Time the file is observed for in minutes",
+            ),
+            (
+                "VITLTIME",
+                (
+                    self["VECTORS"].data["jd"][k][-1]
+                    - self["VECTORS"].data["jd"][k][0]
+                )
+                * (24 * 60),
+                "Time VITL was on in minutes",
+            ),
+            (
+                "ONTARG",
+                100
+                * (self["VECTORS"].data["target_sep"] < (10 / 3600)).sum()
+                / self["VECTORS"].header["NAXIS2"],
+                "Percentage On Target",
+            ),
+            (
+                "NKEEPOUT",
+                100
+                * (
+                    self["VECTORS"].data["nirda_keepout"].sum()
+                    / self["VECTORS"].header["NAXIS2"]
+                ),
+                "Percentage of time NIRDA keepout obeyed",
+            ),
+            (
+                "VKEEPOUT",
+                100
+                * (
+                    self["VECTORS"].data["visda_keepout"].sum()
+                    / self["VECTORS"].header["NAXIS2"]
+                ),
+                "Percentage of time VISDA keepout obeyed",
+            ),
+            (
+                "VITLMISS",
+                self["VECTORS"].data["vitl_missing_frames"].sum()
+                / (self["VECTORS"].data["vitl_frames_count"]).sum(),
+                "N times VITL return missing data",
+            ),
+            (
+                "APCOMP1",
+                100
+                * self.aperture.sum()
+                / (self["APERTURE"].data & 2 == 2).sum(),
+                "Aperture Completeness Metric 1",
+            ),
+            ("TARGCENT", np.hypot(*mid) < 8, "Target Centered"),
+            (
+                "TARGCOMP",
+                (
+                    100
+                    * self.aperture.sum()
+                    / (self["APERTURE"].data & 2 == 2).sum()
+                )
+                > 0.7,
+                "Target Complete",
+            ),
+            (
+                "TARGTIME",
+                np.median(self["VECTORS"].data["exptime"]) / 60 * useable.sum()
+                > 10,
+                "Usable Target Time is over 10 minutes",
+            ),
+        ]
+        if "TCLDTIP2" in self[0].header:
+            cards.append(
+                (
+                    "DETTEMP",
+                    self[0].header["TCLDTIP2"] < 140,
+                    "Detector temperature less than 140K",
+                )
+            )
+        self[0].header.extend(cards)

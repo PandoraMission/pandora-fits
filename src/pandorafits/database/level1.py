@@ -5,6 +5,7 @@
 import os
 import sqlite3
 import stat
+from pathlib import Path
 
 # Third-party
 import numpy as np
@@ -12,7 +13,7 @@ from astropy.time import Time
 
 from .. import CRSOFTVER, LEVEL0_DIR, LEVEL1_DIR, __version__, logger
 from ..utils import get_dpc_hashkey
-from . import DPC_KEYS
+from . import BANSTRINGS, DPC_KEYS
 from .mixins import ArchiveDataBaseMixins, DataBaseMixins
 
 
@@ -102,13 +103,18 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
             chunk=chunk,
         )
 
-    def check_filename_in_database(self, filename, level=0):
+    def check_filename_needs_processing(self, filename, level=0):
         fname = os.path.basename(filename)
+        fname = Path(filename).name
+        if np.any([ban in fname for ban in BANSTRINGS]):
+            # Automatically skip
+            return False
+
         self.cur.execute(
             f"SELECT pfsoftver FROM {f'level{self.level - 1}.' if level == 0 else ''}pointings WHERE filename=?",
             (fname,),
         )
-        return self.cur.fetchone() is not None
+        return self.cur.fetchone() is None
 
     def get_entry(self, filename):
         fname = os.path.basename(filename)
