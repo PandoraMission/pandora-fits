@@ -778,6 +778,12 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 < (10 / 3600)
             )
         )
+        apcomp = np.nan_to_num(
+            self.aperture.sum() / (self["APERTURE"].data & 2 == 2).sum()
+        )
+        bkg10, bkg50, bkg90 = np.nanpercentile(
+            self["BACKGROUND"].data.ravel(), [10, 50, 90]
+        )
         k = np.isfinite(self["VECTORS"].data["avg_ra"])
         cards = [
             ("SRT_DATE", self.start_time.isot, "File Start Date"),
@@ -829,9 +835,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
             ),
             (
                 "APCOMP1",
-                100
-                * self.aperture.sum()
-                / (self["APERTURE"].data & 2 == 2).sum(),
+                100 * apcomp,
                 "Aperture Completeness Metric 1",
             ),
             ("TARGCENT", np.hypot(*mid) < 8, "Target Centered"),
@@ -851,13 +855,36 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                 > 10,
                 "Usable Target Time is over 10 minutes",
             ),
+            (
+                "BKG10",
+                bkg10,
+                "10th percentile of Background",
+            ),
+            (
+                "BKG50",
+                bkg50,
+                "50th percentile of Background",
+            ),
+            (
+                "BKG90",
+                bkg90,
+                "90th percentile of Background",
+            ),
         ]
+        if "TCLDTIP1" in self[0].header:
+            cards.append(
+                (
+                    "DETTEMP1",
+                    self[0].header["TCLDTIP1"] < 140,
+                    "Cold Tip 1 temperature less than 140K",
+                )
+            )
         if "TCLDTIP2" in self[0].header:
             cards.append(
                 (
-                    "DETTEMP",
+                    "DETTEMP2",
                     self[0].header["TCLDTIP2"] < 140,
-                    "Detector temperature less than 140K",
+                    "Cold Tip 2 temperature less than 140K",
                 )
             )
         self[0].header.extend(cards)

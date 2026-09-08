@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 # Third-party
+import fitsio
 import numpy as np
 import pandas as pd
 
@@ -47,6 +48,7 @@ __all__ = [
     "get_astrometry_database",
     "get_target_database",
     "get_level_paths",
+    "get_soc_report",
 ]
 
 
@@ -441,3 +443,65 @@ def get_target_database(**kwargs):
 def get_level_paths(level=0):
     df = get_level_database(level)
     return (df.lvldir + "/" + df.lvlfilename).values
+
+
+def get_soc_report():
+    keys = [
+        "INSTRMNT",
+        "CRSOFTV",
+        "TARG_ID",
+        "TARG_RA",
+        "TARG_DEC",
+        "RA",
+        "DEC",
+        "ROLL",
+        "POSX",
+        "POSY",
+        "GAIADR3",
+        "GAIARA",
+        "GAIADEC",
+        "PARALLAX",
+        "PMRA",
+        "PMDEC",
+        "2MASSID",
+        "J_M",
+        "H_M",
+        "K_M",
+        "G_M",
+        "BP_M",
+        "RP_M",
+        "TEFF",
+        "LOGG",
+        "COLLAPS",
+        "SRT_DATE",
+        "END_DATE",
+        "FILETIME",
+        "VITLTIME",
+        "ONTARG",
+        "NKEEPOUT",
+        "VKEEPOUT",
+        "VITLMISS",
+        "APCOMP1",
+        "TARGCENT",
+        "TARGCOMP",
+        "TARGTIME",
+        "BKG10",
+        "BKG50",
+        "BKG90",
+        "DETTEMP1",
+        "DETTEMP2",
+    ]
+
+    df = get_level_database(2)
+    ss = []
+    for fname in (df.lvldir + "/" + df.lvlfilename).values[1:]:
+        hdr = fitsio.read_header(fname, ext=0)
+        ss.append(
+            pd.Series(
+                {k: (hdr[k] if k in hdr else np.nan) for k in keys},
+                name=fname.split("/")[-1],
+            )
+        )
+    ss = pd.DataFrame(ss)
+    ss.to_csv(f"{LEVEL0_DIR}/soc_report.csv")
+    return ss
