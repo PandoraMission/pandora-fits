@@ -262,7 +262,7 @@ class Level0DataBase(DataBaseMixins):
             path_idxs = np.unique(
                 [p.split("/")[-1] for p in paths[::-1]], return_index=True
             )[1]
-            paths = np.sort(paths[path_idxs])
+            paths = np.sort(paths[::-1][path_idxs])
             rows = []
             with logging_redirect_tqdm():
                 for path in tqdm(paths, desc=f"{image_type} files"):
