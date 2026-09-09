@@ -45,6 +45,7 @@ __all__ = [
     "get_status",
     "get_sizes",
     "get_level_database",
+    "get_level_archive_manifest",
     "get_astrometry_database",
     "get_target_database",
     "get_level_paths",
@@ -428,6 +429,12 @@ def get_level_database(level, **kwargs):
     return df
 
 
+def get_level_archive_manifest(level, **kwargs):
+    with globals()[f"Level{level}DataBase"]() as self:
+        df = self.to_archive_manifest(**kwargs)
+    return df
+
+
 def get_astrometry_database(**kwargs):
     with AstrometryDataBase() as self:
         df = self.to_pandas(**kwargs)
@@ -494,14 +501,23 @@ def get_soc_report():
 
     df = get_level_database(2)
     ss = []
-    for fname in (df.lvldir + "/" + df.lvlfilename).values[1:]:
+    for ofname, fname in zip(
+        df.filename, (df.lvldir + "/" + df.lvlfilename).values
+    ):
         hdr = fitsio.read_header(fname, ext=0)
+        r = {k: (hdr[k] if k in hdr else np.nan) for k in keys}
+        r["lvlfilename"] = fname.split("/")[-1]
         ss.append(
             pd.Series(
-                {k: (hdr[k] if k in hdr else np.nan) for k in keys},
-                name=fname.split("/")[-1],
+                r,
+                name=ofname,
             )
         )
+
     ss = pd.DataFrame(ss)
+    df = get_level_database(0)
+    ss = pd.concat(
+        [ss, df.set_index("filename")[["jd", "date"]]], axis=1
+    ).sort_values("jd")
     ss.to_csv(f"{LEVEL0_DIR}/soc_report.csv")
     return ss

@@ -542,7 +542,7 @@ class ProcessingMixins:
 
         new._append_aperture_extension()
         new._append_background()
-        new._score_file()
+        new._inspect_file()
         new[0].header["PFSOFTV"] = __version__
         new[0].header["PRSOFTV"] = prversion
         new[0].header["PFCLASS"] = new.__class__.__name__.replace(
