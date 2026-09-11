@@ -14,12 +14,14 @@ from abc import ABC, abstractmethod
 import astropy.units as u
 import numpy as np
 from astropy.io import fits
+from astropy.table import Table
 
 __all__ = [
     "BackgroundInspector",
     "PositionOnTargetInspector",
     "TimeOnTargetInspector",
     "DetectorTemperatureInspector",
+    "SNRInspector",
 ]
 
 
@@ -253,9 +255,81 @@ class DetectorTemperatureInspector(Inspector):
         return cards
 
 
+class SNRInspector(Inspector):
+    def calculate(self):
+        df = Table(self.hdulist["VECTORS"].data).to_pandas()
+        k = np.abs(
+            (
+                self.hdulist["VECTORS"].data["target_sep"]
+                - np.nanmedian(self.hdulist["VECTORS"].data["target_sep"])
+            )
+        ) < (10 / 3600)
+        k &= self.hdulist["VECTORS"].data["target_sep"] < (10 / 3600)
+        k &= np.isfinite(self.hdulist["VECTORS"].data["avg_ra"]) & np.isfinite(
+            self.hdulist["VECTORS"].data["avg_dec"]
+        )
+        if self.hdulist.instrument == "VISDA":
+            f = (
+                self.hdulist["SCIENCE"].data
+                - self.hdulist["BACKGROUND"].data[:, None, None]
+            )
+            bkg_mad = np.median(
+                np.abs(
+                    np.diff(f[:, self.hdulist.bkg_aperture], axis=0)
+                    / np.sqrt(2)
+                )
+            )
+            a = self.hdulist.aperture
+            a &= np.median(f, axis=0) > bkg_mad * 10
+            lc = f[:, a].sum(axis=1)
+        else:
+            f = (
+                self.hdulist["SCIENCE"].data
+                - self.hdulist["BACKGROUND"].data[:, :, None]
+            )
+
+            idx = np.unique(
+                self.hdulist["INTEGRATION"].data, return_index=True
+            )[1]
+            lc = (f * self.hdulist.aperture[None, :, :]).sum(axis=(1, 2))[idx]
+            k &= self.hdulist.time.jd > (
+                self.hdulist.time.jd[0] + (5 / (24 * 60))
+            )
+
+        if not k.any():
+            lc_med = 0
+            lc_mad = 0
+            max_pix_val = 0
+            precision = 0
+
+        else:
+            lc_med = np.nanmedian(lc[k])
+            lc_mad = np.nanmedian(np.abs(np.diff(lc[k]) / np.sqrt(2))) * 1.486
+            max_pix_val = np.nanmedian(
+                f[k][:, self.hdulist.aperture], axis=0
+            ).max()
+            precision = (
+                np.nanmedian(np.hypot(df.err_ra[k], df.err_dec[k])) * 3600
+            )
+
+        cards = [
+            fits.Card("lc_med", lc_med, "Median light curve flux value"),
+            fits.Card("lc_mad", lc_mad, "MAD light curve flux value"),
+            fits.Card(
+                "max_pix", max_pix_val, "Maximum pixel flux value in aperture"
+            ),
+            fits.Card("PRECSN", precision, "Pointing precision [arcsecond]"),
+            fits.Card(
+                "exptime0", self.hdulist.exptime[0].value, "Exposure time [s]"
+            ),
+        ]
+        return cards
+
+
 def inspect_file(hdulist):
     """Convenience function applies all of the above Inspectors"""
     BackgroundInspector(hdulist).score()
     TimeOnTargetInspector(hdulist).score()
     PositionOnTargetInspector(hdulist).score()
     DetectorTemperatureInspector(hdulist).score()
+    SNRInspector(hdulist).score()

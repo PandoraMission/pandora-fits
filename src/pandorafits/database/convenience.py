@@ -497,6 +497,11 @@ def get_soc_report():
         "BKG90",
         "DETTEMP1",
         "DETTEMP2",
+        "LC_MED",
+        "LC_MAD",
+        "MAX_PIX",
+        "PRECSN",
+        "EXPTIME0",
     ]
 
     df = get_level_database(2)
