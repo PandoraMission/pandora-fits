@@ -6,8 +6,11 @@ from pathlib import Path
 
 # Third-party
 import fitsio
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from .. import (
     CRSOFTVER,
@@ -17,8 +20,10 @@ from .. import (
     LEVEL2_DIR,
     LEVEL3_DIR,
     LOG_DIR,
+    PREVIEW_DIR,
     __version__,
     logger,
+    open,
 )
 from . import Level1DataBase  # noqa
 from . import Level2DataBase  # noqa
@@ -50,6 +55,8 @@ __all__ = [
     "get_target_database",
     "get_level_paths",
     "get_soc_report",
+    "make_previews",
+    "delete_previews",
 ]
 
 
@@ -526,3 +533,44 @@ def get_soc_report():
     ).sort_values("jd")
     ss.to_csv(f"{LEVEL0_DIR}/soc_report.csv")
     return ss
+
+
+def make_previews():
+    df = get_level_database(2)
+    with logging_redirect_tqdm():
+        for fname in tqdm(
+            (df.lvldir + "/" + df.lvlfilename).values, desc="Files"
+        ):
+            if os.path.isfile(
+                fname.replace(LEVEL2_DIR, PREVIEW_DIR)[:-4] + "png"
+            ):
+                continue
+            if os.path.isfile(fname):
+                os.makedirs(
+                    "/".join(
+                        fname.replace(LEVEL2_DIR, PREVIEW_DIR).split("/")[:-1]
+                    ),
+                    exist_ok=True,
+                )
+                ax = open(fname).plot_data(cmap="Greys_r")  # noqa: F841
+                fig = plt.gcf()
+                fig.savefig(
+                    fname.replace(LEVEL2_DIR, PREVIEW_DIR)[:-4] + "png",
+                    dpi=250,
+                    bbox_inches="tight",
+                )
+                plt.clf()
+                plt.close()
+
+
+def delete_previews():
+    logger.info("Running `delete_previews`")
+    if os.path.exists(PREVIEW_DIR):
+        shutil.rmtree(PREVIEW_DIR)
+    if not os.path.exists(PREVIEW_DIR):
+        os.makedirs(PREVIEW_DIR, exist_ok=True)
+        try:
+            os.chmod(PREVIEW_DIR, 0o750)
+        except (AttributeError, NotImplementedError, OSError):
+            pass
+    logger.info("Finished `delete_previews`")

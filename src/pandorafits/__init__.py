@@ -102,6 +102,7 @@ def reset_config():
         "level1_dir": str(user_root / "level1"),
         "level2_dir": str(user_root / "level2"),
         "level3_dir": str(user_root / "level3"),
+        "preview_dir": str(user_root / "preview"),
         "crsoftver": "v3.06",
     }
     with builtins.open(CONFIGPATH, "w") as configfile:
@@ -172,6 +173,7 @@ for key in [
     "level1_dir",
     "level2_dir",
     "level3_dir",
+    "preview_dir",
 ]:
     if key not in config["SETTINGS"]:
         logger.error(
@@ -188,9 +190,16 @@ CRSOFTVER = config["SETTINGS"]["crsoftver"]
 LEVEL1_DIR = config["SETTINGS"]["level1_dir"]
 LEVEL2_DIR = config["SETTINGS"]["level2_dir"]
 LEVEL3_DIR = config["SETTINGS"]["level3_dir"]
+PREVIEW_DIR = config["SETTINGS"]["preview_dir"]
 
-[_safe_makedirs(dir) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
-[_safe_chmod(dir, 0o750) for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR]]
+[
+    _safe_makedirs(dir)
+    for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR, PREVIEW_DIR]
+]
+[
+    _safe_chmod(dir, 0o750)
+    for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR, PREVIEW_DIR]
+]
 
 
 def display_config() -> pd.DataFrame:
