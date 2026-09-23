@@ -168,6 +168,18 @@ class TimeOnTargetInspector(Inspector):
             self.hdulist["VECTORS"].data["avg_dec"]
         )
 
+        # Calculate durations in minutes using median exposure time per vector
+        median_exptime_min = np.median(self.hdulist["VECTORS"].data["exptime"]) / 60
+
+        # Duration metrics: time on target, keepout compliance, and usable target time
+        on_target_mask = self.hdulist["VECTORS"].data["target_sep"] < (10 / 3600)
+        ontarg_duration = median_exptime_min * on_target_mask.sum()
+
+        nkeepout_duration = median_exptime_min * self.hdulist["VECTORS"].data["nirda_keepout"].sum()
+        vkeepout_duration = median_exptime_min * self.hdulist["VECTORS"].data["visda_keepout"].sum()
+
+        usable_duration = median_exptime_min * useable.sum()
+
         return [
             fits.Card(
                 "SRT_DATE", self.hdulist.start_time.isot, "File Start Date"
@@ -199,6 +211,11 @@ class TimeOnTargetInspector(Inspector):
                 "Percentage On Target",
             ),
             fits.Card(
+                "ONTARG_T",
+                ontarg_duration,
+                "Duration on target in minutes",
+            ),
+            fits.Card(
                 "NKEEPOUT",
                 100
                 * (
@@ -206,6 +223,11 @@ class TimeOnTargetInspector(Inspector):
                     / self.hdulist["VECTORS"].header["NAXIS2"]
                 ),
                 "Percentage of time NIRDA keepout obeyed",
+            ),
+            fits.Card(
+                "NKEEPOUT_T",
+                nkeepout_duration,
+                "Duration NIRDA keepout obeyed in minutes",
             ),
             fits.Card(
                 "VKEEPOUT",
@@ -217,6 +239,11 @@ class TimeOnTargetInspector(Inspector):
                 "Percentage of time VISDA keepout obeyed",
             ),
             fits.Card(
+                "VKEEPOUT_T",
+                vkeepout_duration,
+                "Duration VISDA keepout obeyed in minutes",
+            ),
+            fits.Card(
                 "VITLMISS",
                 self.hdulist["VECTORS"].data["vitl_missing_frames"].sum()
                 / (self.hdulist["VECTORS"].data["vitl_frames_count"]).sum(),
@@ -224,11 +251,13 @@ class TimeOnTargetInspector(Inspector):
             ),
             fits.Card(
                 "TARGTIME",
-                np.median(self.hdulist["VECTORS"].data["exptime"])
-                / 60
-                * useable.sum()
-                > 10,
+                usable_duration > 10,
                 "Usable Target Time is over 10 minutes",
+            ),
+            fits.Card(
+                "TARGTIME_T",
+                usable_duration,
+                "Usable target time in minutes",
             ),
         ]
 
