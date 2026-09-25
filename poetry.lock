@@ -5326,14 +5326,14 @@ files = [
 
 [[package]]
 name = "pandoraaperture"
-version = "0.2.3"
+version = "0.2.4"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "pandoraaperture-0.2.3-py3-none-any.whl", hash = "sha256:306137a891c30116bbb2468e4448228baaa7a9b79a65162070f5e440345779e2"},
-    {file = "pandoraaperture-0.2.3.tar.gz", hash = "sha256:956d7f0935aa9609ac52e4fd91d22d1d17bdcce24022df19ea1191f55c47a7d5"},
+    {file = "pandoraaperture-0.2.4-py3-none-any.whl", hash = "sha256:d51f2f30a2976440a4e3731cac521842fb6ef8d37526ee0d73b95a71dc207993"},
+    {file = "pandoraaperture-0.2.4.tar.gz", hash = "sha256:07354f3f2888078f22c87007fd534b8ee66e5daae992edad7d06f66fa0c98fa8"},
 ]
 
 [package.dependencies]
@@ -8332,4 +8332,4 @@ database = ["fitsio"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "4f5b030d3c50ef0804d27cc6636ca770a2d50fbc78d6fcc4280e951fb1b078b2"
+content-hash = "c101f1bc41e0ad24f4a2d45017636363848cdbb04a85a9c314f9d99b80905ca6"
