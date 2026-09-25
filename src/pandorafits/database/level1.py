@@ -44,7 +44,7 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
                 LEFT JOIN pointings AS dst
                         ON src.filename = dst.filename
                 WHERE (src.badchecksum = 0 AND src.baddatasum = 0)
-                    AND (dst.filename IS NULL OR dst.pfsoftver != "{__version__}");""",
+                    AND (dst.filename IS NULL);""",
         )
         nrows = self.cur.fetchone()[0]
         return nrows
@@ -67,10 +67,10 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
             LEFT JOIN pointings AS dst
                  ON src.filename = dst.filename
             WHERE (src.badchecksum = 0 AND src.baddatasum = 0)
-              AND (dst.filename IS NULL OR dst.pfsoftver != ?)
+              AND (dst.filename IS NULL)
         """
 
-        params = [__version__]
+        params = []  # [__version__]
 
         # Add LIMIT/OFFSET only if chunking
         if limit is not None:
