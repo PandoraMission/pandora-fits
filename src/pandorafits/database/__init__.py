@@ -68,7 +68,9 @@ except ImportError as exc:
 from ..roll import get_roll  # noqa
 from .targets import TargetDataBase  # noqa
 from .astrometry import AstrometryDataBase  # noqa
+from .engineering import EngineeringDataBase, PayloadDataBase  # noqa
 from .level0 import Level0DataBase  # noqa
+from .levele import LevelEDataBase  # noqa
 from .level1 import Level1DataBase  # noqa
 from .level2 import Level2DataBase  # noqa
 from .level3 import Level3DataBase  # noqa

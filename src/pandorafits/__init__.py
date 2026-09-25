@@ -100,6 +100,7 @@ def reset_config():
         "log_dir": str(user_root / "logs"),
         "level0_dir": str(user_root),
         "level1_dir": str(user_root / "level1"),
+        "levele_dir": str(user_root / "levele"),
         "level2_dir": str(user_root / "level2"),
         "level3_dir": str(user_root / "level3"),
         "preview_dir": str(user_root / "preview"),
@@ -170,6 +171,7 @@ for key in [
     "level0_dir",
     "data_dir",
     "crsoftver",
+    "levele_dir",
     "level1_dir",
     "level2_dir",
     "level3_dir",
@@ -187,6 +189,7 @@ LEVEL0_DIR = config["SETTINGS"]["level0_dir"]
 DATA_DIR = config["SETTINGS"]["data_dir"]
 CRSOFTVER = config["SETTINGS"]["crsoftver"]
 
+LEVELE_DIR = config["SETTINGS"]["levele_dir"]
 LEVEL1_DIR = config["SETTINGS"]["level1_dir"]
 LEVEL2_DIR = config["SETTINGS"]["level2_dir"]
 LEVEL3_DIR = config["SETTINGS"]["level3_dir"]
@@ -194,11 +197,11 @@ PREVIEW_DIR = config["SETTINGS"]["preview_dir"]
 
 [
     _safe_makedirs(dir)
-    for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR, PREVIEW_DIR]
+    for dir in [LEVELE_DIR, LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR, PREVIEW_DIR]
 ]
 [
     _safe_chmod(dir, 0o750)
-    for dir in [LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR, PREVIEW_DIR]
+    for dir in [LEVELE_DIR, LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR, PREVIEW_DIR]
 ]
 
 

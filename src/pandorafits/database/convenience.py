@@ -19,6 +19,7 @@ from .. import (
     LEVEL1_DIR,
     LEVEL2_DIR,
     LEVEL3_DIR,
+    LEVELE_DIR,
     LOG_DIR,
     PREVIEW_DIR,
     __version__,
@@ -28,20 +29,34 @@ from .. import (
 from . import Level1DataBase  # noqa
 from . import Level2DataBase  # noqa
 from . import Level3DataBase  # noqa
-from . import AstrometryDataBase, Level0DataBase, TargetDataBase
+from . import LevelEDataBase  # noqa
+from . import (
+    AstrometryDataBase,
+    EngineeringDataBase,
+    Level0DataBase,
+    PayloadDataBase,
+    TargetDataBase,
+)
 
 __all__ = [
+    "delete_engineeringdatabase",
+    "delete_payloaddatabase",
+    "update_engineeringdatabase",
+    "update_payloaddatabase",
     "delete_targetdatabase",
     "update_targetdatabase",
     "delete_astrometrydatabase",
     "update_astrometrydatabase",
     "update_level0database",
+    "update_leveledatabase",
     "update_level1database",
     "update_level2database",
     "delete_level0database",
+    "delete_leveledatabase",
     "delete_level1database",
     "delete_level2database",
     "delete_level3database",
+    "delete_levelefilestorage",
     "delete_level1filestorage",
     "delete_level2filestorage",
     "delete_level3filestorage",
@@ -106,6 +121,60 @@ def delete_astrometrydatabase() -> None:
         )
 
 
+def delete_engineeringdatabase() -> None:
+    """
+    Deletes the SQLite database file for engineering data.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the database file does not exist.
+    """
+    db_path = os.path.join(LEVEL0_DIR, "engineering.db")
+    if os.path.exists(db_path):
+        os.remove(db_path)
+        logger.warning(f"Engineering Database at {db_path} has been deleted.")
+    else:
+        logger.warning(
+            f"Tried to delete EngineeringDataBase. No database found at {db_path}."
+        )
+
+
+def delete_payloaddatabase() -> None:
+    """
+    Deletes the SQLite database file for payload engineering data.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the database file does not exist.
+    """
+    db_path = os.path.join(LEVEL0_DIR, "payload.db")
+    if os.path.exists(db_path):
+        os.remove(db_path)
+        logger.warning(f"Payload Database at {db_path} has been deleted.")
+    else:
+        logger.warning(
+            f"Tried to delete PayloadDataBase. No database found at {db_path}."
+        )
+
+
+def update_engineeringdatabase() -> None:
+    """
+    Creates and updates to the SQLite database file.
+    """
+    with EngineeringDataBase() as db:
+        db.crawl_and_add()
+
+
+def update_payloaddatabase() -> None:
+    """
+    Creates and updates to the SQLite database file.
+    """
+    with PayloadDataBase() as db:
+        db.crawl_and_add()
+
+
 def update_astrometrydatabase(match_str="") -> None:
     """
     Creates and updates to the SQLite database file.
@@ -119,6 +188,14 @@ def update_level0database(match_str="") -> None:
     Creates and updates to the SQLite database file.
     """
     with Level0DataBase() as db:
+        db.crawl_and_add(match_str=match_str)
+
+
+def update_leveledatabase(match_str="") -> None:
+    """
+    Creates and updates to the SQLite database file.
+    """
+    with LevelEDataBase() as db:
         db.crawl_and_add(match_str=match_str)
 
 
@@ -157,6 +234,25 @@ def delete_level0database() -> None:
         )
 
 
+def delete_leveledatabase() -> None:
+    """
+    Deletes the SQLite database file.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the database file does not exist.
+    """
+    db_path = os.path.join(LEVELE_DIR, "levele.db")
+    if os.path.exists(db_path):
+        os.remove(db_path)
+        logger.warning(f"Database at {db_path} has been deleted.")
+    else:
+        logger.warning(
+            f"Tried to delete LevelEDataBase. No database found at {db_path}."
+        )
+
+
 def delete_level1database() -> None:
     """
     Deletes the SQLite database file.
@@ -187,6 +283,19 @@ def delete_level1filestorage():
         except (AttributeError, NotImplementedError, OSError):
             pass
     logger.info("Finished `delete_level1filestorage`")
+
+
+def delete_levelefilestorage():
+    logger.info("Running `delete_levelefilestorage`")
+    if os.path.exists(LEVELE_DIR):
+        shutil.rmtree(LEVELE_DIR)
+    if not os.path.exists(LEVELE_DIR):
+        os.makedirs(LEVELE_DIR, exist_ok=True)
+        try:
+            os.chmod(LEVELE_DIR, 0o750)
+        except (AttributeError, NotImplementedError, OSError):
+            pass
+    logger.info("Finished `delete_levelefilestorage`")
 
 
 def delete_level2database() -> None:
@@ -283,6 +392,8 @@ def delete_all():
     delete_logs()
     delete_astrometrydatabase()
     delete_level0database()
+    delete_leveledatabase()
+    delete_levelefilestorage()
     delete_level1database()
     delete_level1filestorage()
     delete_level2database()

@@ -13,21 +13,45 @@ from astropy.io import fits
 from astropy.table import Table
 from astropy.time import Time
 
-from .. import CRSOFTVER, LEVEL0_DIR, LEVEL1_DIR, __version__, logger
+from .. import LEVEL0_DIR, LEVELE_DIR, __version__, logger
 from ..utils import get_dpc_hashkey
-from . import BANSTRINGS, DPC_KEYS
-from .mixins import ArchiveDataBaseMixins, DataBaseMixins
+from . import BANSTRINGS
+from .engineering import EngineeringDataBase, PayloadDataBase
+from .mixins import DataBaseMixins
 
 
-class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
+def get_engineering_fits(time_range):
+    pri = fits.PrimaryHDU()
+    pri.header["PFTIME"] = (
+        Time.now().isot,
+        "Pandora DPC Processing Time",
+    )
+    hdulist = [pri]
+    with EngineeringDataBase() as self:
+        df = self.to_pandas(time_range=time_range)
+    hdulist.append(fits.BinTableHDU(Table.from_pandas(df), name="ENGINEERING"))
+    with PayloadDataBase() as self:
+        df = self.to_pandas(time_range=time_range)
+    hdulist.append(fits.BinTableHDU(Table.from_pandas(df), name="PAYLOAD"))
+    return fits.HDUList(hdulist)
+
+
+class LevelEDataBase(DataBaseMixins):
     """Database for managing Level 1 files."""
 
     table_name = "pointings"
-    db_path = os.path.join(LEVEL1_DIR, "level1.db")
-    level = 1
-    level_dir = LEVEL1_DIR
+    db_path = os.path.join(LEVELE_DIR, "levele.db")
+    level = "E"
+    level_dir = LEVELE_DIR
 
-    _sql_key_dict = DPC_KEYS
+    _sql_key_dict = {
+        "filename": "TEXT PRIMARY KEY",
+        "lvlfilename": "TEXT",
+        "dir": "TEXT",
+        "lvldir": "TEXT",
+        "jd": "FLOAT",
+        "create_time": "FLOAT",
+    }
 
     def __init__(self):
         super().__init__()
@@ -42,7 +66,7 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
     def n_files_to_process(self):
         self.cur.execute(
             f"""SELECT COUNT()
-                FROM level{self.level - 1}.pointings AS src
+                FROM level0.pointings AS src
                 LEFT JOIN pointings AS dst
                         ON src.filename = dst.filename
                 WHERE (src.badchecksum = 0 AND src.baddatasum = 0)
@@ -65,11 +89,12 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
 
         base_sql = f"""
             SELECT {x}
-            FROM level{self.level - 1}.pointings AS src
+            FROM level0.pointings AS src
             LEFT JOIN pointings AS dst
                  ON src.filename = dst.filename
             WHERE (src.badchecksum = 0 AND src.baddatasum = 0)
               AND (dst.filename IS NULL)
+              OR ((dst.create_time - dst.jd) < 15)
         """
 
         params = []  # [__version__]
@@ -98,12 +123,12 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
     # def n_files_to_process(self):
     #     return self.get_x_to_process(x="COUNT()", nchunks=None, chunk=None)[0]
 
-    def get_pointings_to_process(self, nchunks=None, chunk=None):
-        return self.get_x_to_process(
-            x="src.targ_ra, src.targ_dec, src.targ_rll",
-            nchunks=nchunks,
-            chunk=chunk,
-        )
+    # def get_pointings_to_process(self, nchunks=None, chunk=None):
+    #     return self.get_x_to_process(
+    #         x="src.targ_ra, src.targ_dec, src.targ_rll",
+    #         nchunks=nchunks,
+    #         chunk=chunk,
+    #     )
 
     def check_filename_needs_processing(self, filename, level=0):
         fname = os.path.basename(filename)
@@ -113,7 +138,7 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
             return False
 
         self.cur.execute(
-            f"SELECT pfsoftver FROM {f'level{self.level - 1}.' if level == 0 else ''}pointings WHERE filename=?",
+            f"SELECT pfsoftver FROM 'level0.pointings WHERE filename=?",
             (fname,),
         )
         return self.cur.fetchone() is None
@@ -121,36 +146,26 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
     def get_entry(self, filename):
         fname = os.path.basename(filename)
         self.cur.execute(
-            f"SELECT * FROM level{self.level - 1}.pointings WHERE lvlfilename=?",
+            f"SELECT * FROM level0.pointings WHERE lvlfilename=?",
             (fname,),
         )
         row = self.cur.fetchone()
-        output_filename = self.get_output_filename(row)
+        output_filename = self.get_output_filename(filename)
         lvldir, lvlfilename = os.path.split(output_filename)
-        return (row[0], lvlfilename, row[2], lvldir, *row[4:])
+        return (row[0], lvlfilename, row[2], lvldir, row[8], Time.now().jd)
 
-    def get_output_filename(self, filename_or_row):
-        if isinstance(filename_or_row, tuple):
-            row = filename_or_row
-            t = Time(row[12], format="jd").to_datetime()
-            targ_id, targ_ra, targ_dec = row[20], row[21], row[22]
-            fname = row[0]
-        elif isinstance(filename_or_row, str):
-            fname = os.path.basename(filename_or_row)
-            self.cur.execute(
-                f"SELECT filename, start, targ_id, targ_ra, targ_dec FROM level{self.level - 1}.pointings WHERE lvlfilename=?",
-                (fname,),
-            )
-            row = self.cur.fetchone()
-            if row is None:
-                return None
-            t = Time(row[1], format="jd").to_datetime()
-            targ_id, targ_ra, targ_dec = row[2:]
-            fname = row[0]
-        elif filename_or_row is None:
+    def get_output_filename(self, filename):
+        fname = os.path.basename(filename)
+        self.cur.execute(
+            f"SELECT filename, start, targ_id, targ_ra, targ_dec FROM level0.pointings WHERE lvlfilename=?",
+            (fname,),
+        )
+        row = self.cur.fetchone()
+        if row is None:
             return None
-        else:
-            return None
+        t = Time(row[1], format="jd").to_datetime()
+        targ_id, targ_ra, targ_dec = row[2:]
+        fname = row[0]
 
         fname_no_suffix, suffix = os.path.splitext(fname)
         return os.path.join(
@@ -159,46 +174,36 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
             str(t.month),
             str(t.day),
             get_dpc_hashkey(targ_id, targ_ra, targ_dec),
-            f"{fname_no_suffix}_v{__version__.replace('.', '-')}_l{self.level}{suffix}",
+            f"{fname_no_suffix}_v{__version__.replace('.', '-')}_eng{suffix}",
         )
 
-    def _get_filemap(self):
-        from ..nirda import NIRDALevel0HDUList
-        from ..visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
-
-        filemap = {
-            "VisSci": VISDALevel0HDUList,
-            "VisImg": VISDAFFILevel0HDUList,
-            "InfImg": NIRDALevel0HDUList,
-        }
-
-        return filemap
-
     def process(self, filename, **kwargs):
-        logger.info(f"Processing {filename} to Level {self.level}.")
+        logger.info(f"Processing {filename} engineering data.")
         logger.info("Ensuring file directory present.")
         path = self.get_output_filename(filename)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        filemap = self._get_filemap()
-        for key, HDUList in filemap.items():
-            if key in filename:
-                with HDUList(filename) as hdulist:
-                    hdulist = getattr(hdulist, f"to_level{self.level}")(
-                        **kwargs
-                    )
-                    hdulist.writeto(path, overwrite=True, checksum=True)
+        fname = os.path.basename(filename)
+        self.cur.execute(
+            f"SELECT start, exptime FROM level0.pointings WHERE lvlfilename=?",
+            (fname,),
+        )
+        start, exptime = self.cur.fetchone()
+        hdulist = get_engineering_fits(
+            (start - 600 / 86400, start + exptime / 86400 + 600 / 86400)
+        )
+
+        hdulist.writeto(path, overwrite=True, checksum=True)
         logger.info(f"Wrote {os.path.basename(filename)} to {path}")
         return self.get_entry(filename)
 
     def crawl_and_process(self, nchunks=None, chunk=None):
         paths = self.get_files_to_process(nchunks=nchunks, chunk=chunk)
         for path in paths:
-            try:
-                entry = self.process(
-                    path,
-                )
-            except:
-                logger.exception(
-                    f"Error while increasing Level {self.level - 1} to Level {self.level} [{path}]. Skipping."
-                )
+            # try:
+            entry = self.process(
+                path,
+            )
             self.add_entry(entry)
+
+            # except:
+            #     logger.exception(f"Error while creating engineering file. Skipping.")
