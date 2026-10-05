@@ -199,11 +199,12 @@ class LevelEDataBase(DataBaseMixins):
     def crawl_and_process(self, nchunks=None, chunk=None):
         paths = self.get_files_to_process(nchunks=nchunks, chunk=chunk)
         for path in paths:
-            # try:
-            entry = self.process(
-                path,
-            )
-            self.add_entry(entry)
-
-            # except:
-            #     logger.exception(f"Error while creating engineering file. Skipping.")
+            try:
+                entry = self.process(
+                    path,
+                )
+                self.add_entry(entry)
+            except:
+                logger.exception(
+                    f"Error while creating engineering file. Skipping."
+                )

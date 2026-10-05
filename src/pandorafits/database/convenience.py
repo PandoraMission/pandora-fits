@@ -196,7 +196,7 @@ def update_leveledatabase(match_str="") -> None:
     Creates and updates to the SQLite database file.
     """
     with LevelEDataBase() as db:
-        db.crawl_and_add(match_str=match_str)
+        db.crawl_and_process(match_str=match_str)
 
 
 def update_level1database() -> None:
