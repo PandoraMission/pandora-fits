@@ -156,6 +156,7 @@ class EngineeringDataBase(DataBaseMixins):
         paths = np.sort(
             [str(path) for path in Path(root).rglob("Analogs.json")]
         )
+        paths = np.asarray([path for path in paths if "staging" not in path])
         path_idxs = np.unique(
             [p.split("/")[-1] for p in paths[::-1]], return_index=True
         )[1]
@@ -241,6 +242,7 @@ class PayloadDataBase(EngineeringDataBase):
         paths = np.sort(
             [str(path) for path in Path(root).rglob("PayloadTelemetry.json")]
         )
+        paths = np.asarray([path for path in paths if "staging" not in path])
         path_idxs = np.unique(
             [p.split("/")[-1] for p in paths[::-1]], return_index=True
         )[1]
