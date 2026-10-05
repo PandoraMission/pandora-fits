@@ -141,7 +141,7 @@ class EngineeringDataBase(DataBaseMixins):
             [f"{key}" for key, item in self._sql_key_dict.items()]
         )
         value_string = ", ".join(["?"] * len(self._sql_key_dict))
-        self.update_str = f"""INSERT IN)TO {self.table_name} ({key_string}) VALUES ({value_string}) ON CONFLICT (JD) DO NOTHING"""
+        self.update_str = f"""INSERT INTO {self.table_name} ({key_string}) VALUES ({value_string}) ON CONFLICT (JD) DO NOTHING"""
         self.conn = sqlite3.connect(self.db_path)
         self.cur = self.conn.cursor()
         self.cur.execute(
