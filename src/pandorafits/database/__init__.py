@@ -14,6 +14,7 @@ BANSTRINGS = [
     "2026-07-0",
     "2026-07-1",
     "engineering_data",
+    "staging",
 ]
 
 DPC_KEYS = {
