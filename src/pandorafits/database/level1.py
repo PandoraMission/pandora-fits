@@ -197,8 +197,8 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
                 entry = self.process(
                     path,
                 )
+                self.add_entry(entry)
             except:
                 logger.exception(
                     f"Error while increasing Level {self.level - 1} to Level {self.level} [{path}]. Skipping."
                 )
-            self.add_entry(entry)
