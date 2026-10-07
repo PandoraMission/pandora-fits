@@ -188,13 +188,8 @@ class PositionOnTargetInspector(Inspector):
             *centered_cards,
             fits.Card(
                 "TARGCOMP",
-                (
-                    100
-                    * self.hdulist.aperture.sum()
-                    / (self.hdulist["APERTURE"].data & 2 == 2).sum()
-                )
-                > 0.7,
-                "Target Complete",
+                apcomp > 0.7,
+                "Over 70% of target aperture pixels usable",
             ),
         ]
 
