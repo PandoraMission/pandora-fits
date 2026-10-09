@@ -408,32 +408,44 @@ class ProcessingMixins:
                     f"2MASS J{cat['tmass_source_id']}",
                     "2MASS source ID",
                 ),
-                ("j_m", np.nan_to_num(cat["j_m"], -99), "2MASS j magnitude"),
-                ("h_m", np.nan_to_num(cat["h_m"], -99), "2MASS h magnitude"),
-                ("k_m", np.nan_to_num(cat["k_m"], -99), "2MASS k magnitude"),
+                (
+                    "j_m",
+                    np.nan_to_num(cat["j_m"], nan=-99),
+                    "2MASS j magnitude",
+                ),
+                (
+                    "h_m",
+                    np.nan_to_num(cat["h_m"], nan=-99),
+                    "2MASS h magnitude",
+                ),
+                (
+                    "k_m",
+                    np.nan_to_num(cat["k_m"], nan=-99),
+                    "2MASS k magnitude",
+                ),
                 (
                     "g_m",
-                    np.nan_to_num(cat["phot_g_mean_mag"], -99),
+                    np.nan_to_num(cat["phot_g_mean_mag"], nan=-99),
                     "Gaia DR3 g magnitude",
                 ),
                 (
                     "bp_m",
-                    np.nan_to_num(cat["phot_bp_mean_mag"], -99),
+                    np.nan_to_num(cat["phot_bp_mean_mag"], nan=-99),
                     "Gaia DR3 bp magnitude",
                 ),
                 (
                     "rp_m",
-                    np.nan_to_num(cat["phot_rp_mean_mag"], -99),
+                    np.nan_to_num(cat["phot_rp_mean_mag"], nan=-99),
                     "Gaia DR3 rp magnitude",
                 ),
                 (
                     "teff",
-                    np.nan_to_num(cat["teff_gspphot"], -1),
+                    np.nan_to_num(cat["teff_gspphot"], nan=-1),
                     "Gaia DR3 Teff",
                 ),
                 (
                     "logg",
-                    np.nan_to_num(cat["logg_gspphot"], -1),
+                    np.nan_to_num(cat["logg_gspphot"], nan=-1),
                     "Gaia DR3 logg",
                 ),
             ]
