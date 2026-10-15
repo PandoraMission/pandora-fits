@@ -140,6 +140,12 @@ class PositionOnTargetInspector(Inspector):
     within 10/20/30 pixels of the subarray center, using the per-cadence
     target position in the VECTORS extension. Cadences without valid VITL
     pointing count as not centered.
+
+    APCOMP1 is the percentage of target aperture pixels (APERTURE bit 2)
+    that the instrument's `aperture` property keeps (0 for an empty
+    aperture), and TARGCOMP is whether that exceeds 70%. NIRDA keeps target
+    pixels that are good in QUALITY; VISDA keeps target pixels that are not
+    contaminated.
     """
 
     def calculate(self):

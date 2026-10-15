@@ -3,10 +3,12 @@
 # Standard library
 import warnings
 from copy import deepcopy
+from dataclasses import dataclass
 
 # Third-party
 import astropy.units as u
 import numpy as np
+import pandas as pd
 import pandoraaperture as pa
 
 # from astropy.coordinates import SkyCoord
@@ -17,6 +19,71 @@ from pandoraref import __version__ as prversion
 
 from . import __version__, logger
 from .database import AstrometryDataBase, Level0DataBase
+
+# Catalog column of the magnitude named by the MAG_SRC keyword of a pandoraref
+# magnitude conversion product.
+MAG_SRC_COLUMNS = {"B": "phot_bp_mean_mag", "J_M": "j_m"}
+
+
+def get_scene_flux(cat, reference):
+    """Expected flux of each catalog star on a detector.
+
+    The band and zero point come from the detector's pandoraref magnitude
+    conversion product (its ``MAG_SRC`` keyword and ``magnitude_to_flux``),
+    so each detector is scaled by its own band: Gaia BP for VISDA, 2MASS J
+    for NIRDA.
+
+    Parameters
+    ----------
+    cat : pandas.DataFrame
+        Scene catalog, as built by `pandoraaperture.SkyScene`.
+    reference : pandoraref.VISDAReference or pandoraref.NIRDAReference
+        Reference of the detector.
+
+    Returns
+    -------
+    flux : astropy.units.Quantity
+        Flux of each star [count / s]. Stars without the magnitude get zero.
+    column : str
+        Catalog column used.
+    n_missing : int
+        Number of stars without the magnitude.
+    """
+    mag_src = fits.getheader(reference.magnitude_conversion_file)["MAG_SRC"]
+    mag_src = mag_src.strip().upper()
+    if mag_src not in MAG_SRC_COLUMNS:
+        raise ValueError(f"Unknown magnitude source `{mag_src}`.")
+    column = MAG_SRC_COLUMNS[mag_src]
+    # Catalog columns can have object dtype, where NaN checks do not work.
+    magnitude = pd.to_numeric(cat[column], errors="coerce").to_numpy(float)
+    flux = np.asarray(reference.magnitude_to_flux(magnitude), dtype=float)
+    missing = ~np.isfinite(flux)
+    flux[missing] = 0
+    return u.Quantity(flux, "count / s"), column, int(missing.sum())
+
+
+@dataclass
+class DetectorSkyScene(pa.SkyScene):
+    """`pandoraaperture.SkyScene` with star fluxes in the detector's band.
+
+    `pandoraaperture.SkyScene.flux` converts Gaia BP magnitudes with the
+    VISDA zero point for every detector, which is wrong for NIRDA. Here the
+    fluxes come from `get_scene_flux` with the detector's `reference`.
+    """
+
+    reference: object = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        (
+            self._flux,
+            self.magnitude_column,
+            self.n_missing_magnitude,
+        ) = get_scene_flux(self.cat, self.reference)
+
+    @property
+    def flux(self):
+        return self._flux
 
 
 class ProcessingMixins:
@@ -463,16 +530,37 @@ class ProcessingMixins:
             pixel_buffer = (230, 30)
         else:
             pixel_buffer = (30, 30)
-        scene = pa.SkyScene(
-            self.prf, self.wcs, self.start_time, pixel_buffer=pixel_buffer
+        scene = DetectorSkyScene(
+            self.prf,
+            self.wcs,
+            self.start_time,
+            pixel_buffer=pixel_buffer,
+            reference=self.reference,
         )
-
-        # scene = pa.SkyScene(self.prf, self.wcs, self.start_time)
 
         if len(scene.cat) == 0:
             raise ValueError("Can not find catalog stars")
+        if scene.n_missing_magnitude > 0:
+            logger.warning(
+                f"{scene.n_missing_magnitude} catalog stars have no "
+                f"`{scene.magnitude_column}` magnitude. They are given zero "
+                "flux, so their light is not flagged as contamination."
+            )
         # Delta pos is a bit of a hack, it seems like input PSF model is OBO
         hdu = scene.get_aperture_hdu(self.coord, delta_pos=(0, 0))
+        hdu.header["MAGSRC"] = (
+            scene.magnitude_column,
+            "Catalog magnitude used for scene fluxes",
+        )
+        hdu.header["NOMAG"] = (
+            scene.n_missing_magnitude,
+            "Catalog stars without MAGSRC, given zero flux",
+        )
+        if not (hdu.data & 2).any():
+            logger.warning(
+                "The target aperture is empty. The target may be fainter "
+                "than the aperture thresholds or off the subarray."
+            )
         self.append(hdu)
         hdu = scene.get_model_hdu(delta_pos=(0, 0))
         self.append(hdu)

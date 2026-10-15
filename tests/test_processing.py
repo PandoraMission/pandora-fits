@@ -1,10 +1,13 @@
 # Third-party
 import numpy as np
+import pandas as pd
+import pytest
 from astropy.io import fits
 
 # First-party/Local
+from pandorafits import NIRDAReference, VISDAReference
 from pandorafits.nirda import NIRDALevel1HDUList
-from pandorafits.processing import ProcessingMixins
+from pandorafits.processing import ProcessingMixins, get_scene_flux
 
 
 class OnesReferenceHDUList(ProcessingMixins, fits.HDUList):
@@ -64,3 +67,28 @@ def test_wavelength_solution_without_vectors():
             with_vectors["WAVELENGTH_SOLUTION"].data[column],
             equal_nan=True,
         )
+
+
+@pytest.mark.parametrize(
+    "reference, column, magnitudes",
+    [
+        (NIRDAReference, "j_m", [9.0, None, np.nan, 11.0]),
+        (VISDAReference, "phot_bp_mean_mag", [11.0, 12.0, None, 13.5]),
+    ],
+)
+def test_scene_flux_uses_detector_band(reference, column, magnitudes):
+    # pandoraaperture builds its catalog with object dtype columns.
+    other = "phot_bp_mean_mag" if column == "j_m" else "j_m"
+    cat = pd.DataFrame(
+        {column: magnitudes, other: [1.0, 2.0, 3.0, 4.0]}, dtype=object
+    )
+    flux, used_column, n_missing = get_scene_flux(cat, reference)
+    assert used_column == column
+    assert flux.unit == "ct / s"
+    has_magnitude = np.array([m is not None and m == m for m in magnitudes])
+    assert n_missing == (~has_magnitude).sum()
+    assert np.all(flux.value[~has_magnitude] == 0)
+    expected = reference.magnitude_to_flux(
+        np.array(magnitudes, dtype=float)[has_magnitude]
+    )
+    assert np.allclose(flux.value[has_magnitude], expected)

@@ -445,13 +445,18 @@ class NIRDALevel1HDUList(NIRDALevel0HDUList):
 
     @property
     def aperture(self):
+        """Target aperture pixels (APERTURE bit 2) that are good in QUALITY.
+
+        Each row is a wavelength, so flagged pixels are excluded one by one
+        and their rows are kept. Pixels flagged as contaminated by another
+        star (bit 4) are kept: in NIRDA they lie along dispersed traces, and
+        removing them would remove whole wavelength ranges. Their light is a
+        dilution, reported by the APERTURE header card CONTAM.
+        """
         if "APERTURE" not in self:
             raise KeyError("No APERTURE extension available")
-        aper = self["APERTURE"].data & 2 == 2
-        q = self["QUALITY"].data == 0
-        bkg = self["APERTURE"].data & 4 == 0
-        ok_column = ((bkg & q) * (aper & q)).sum(axis=1) == aper.sum(axis=1)
-        return aper & ok_column[:, None]
+        target = (self["APERTURE"].data & 2) == 2
+        return target & (self["QUALITY"].data == 0)
 
     @property
     def bkg_aperture(self):
