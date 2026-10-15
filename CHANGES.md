@@ -20,6 +20,8 @@ Notable changes to `pandorafits`, newest version first. Every change that affect
 - Database crawls on Windows: Level 0 entries stored the full path as the file name and an empty folder, so re-crawls failed and duplicate downloads were not skipped. Rebuild Level 0 databases made on Windows.
 - Files in `engineering_data` or `staging` folders are skipped by the crawls, as intended; banned folder names are now a separate list, `BANFOLDERS`, matched only against folders below `DATA_DIR`.
 - Engineering and payload telemetry databases ingest every day (only one day was kept), store UTC times (packet times are TAI; they were stored 37 s late), match columns by name, update days that are re-ingested, and work on Windows. Rebuild these databases.
+- Level E no longer reprocesses recent files on every run (or files with bad checksums); a remade engineering file replaces its entry.
+- Chunked processing (`nchunks`, `chunk`) assigns each file to a chunk by a stable hash of its name, so chunks no longer skip or repeat files as other chunks finish.
 - `writeto` writes fresh checksums by default and sets `NEXTEND`; the Level 2 `ASTROMETRY` header no longer repeats `EXTNAME` or carries stale checksums.
 - A calibration step (bias, dark, flat, ...) is not applied twice.
 - `SNRInspector` no longer crashes on an empty target aperture; an empty aperture is logged.
@@ -29,5 +31,5 @@ Notable changes to `pandorafits`, newest version first. Every change that affect
 ### Added
 
 - Demos: `demos/01_visda_reduction.ipynb`, `02_nirda_reduction.ipynb`, `03_visit_analysis.ipynb`.
-- `utils.wrap_deg`, `circular_mean_deg`, `circular_median_deg`, `CircularMeanAggregate`; `processing.get_scene_flux`, `DetectorSkyScene`; `PandoraHDUList.exposure_windows`; `nirda.get_nirda_read_mid_times`; `utils.split_path`, `unique_by_name`; `database.BANFOLDERS`, `is_banned`.
+- `utils.wrap_deg`, `circular_mean_deg`, `circular_median_deg`, `CircularMeanAggregate`; `processing.get_scene_flux`, `DetectorSkyScene`; `PandoraHDUList.exposure_windows`; `nirda.get_nirda_read_mid_times`; `utils.split_path`, `unique_by_name`; `database.BANFOLDERS`, `is_banned`; `database.mixins.ProcessingQueueMixins`, `file_chunk`.
 - Tests for the above; the dummy-file tests write to a temporary folder.

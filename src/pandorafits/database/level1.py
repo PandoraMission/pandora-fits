@@ -8,7 +8,6 @@ import stat
 from pathlib import Path
 
 # Third-party
-import numpy as np
 from astropy.io import fits
 from astropy.table import Table
 from astropy.time import Time
@@ -16,10 +15,16 @@ from astropy.time import Time
 from .. import CRSOFTVER, LEVEL0_DIR, LEVEL1_DIR, __version__, logger
 from ..utils import get_dpc_hashkey
 from . import DPC_KEYS, is_banned
-from .mixins import ArchiveDataBaseMixins, DataBaseMixins
+from .mixins import (
+    ArchiveDataBaseMixins,
+    DataBaseMixins,
+    ProcessingQueueMixins,
+)
 
 
-class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
+class Level1DataBase(
+    ProcessingQueueMixins, ArchiveDataBaseMixins, DataBaseMixins
+):
     """Database for managing Level 1 files."""
 
     table_name = "pointings"
@@ -39,53 +44,15 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
         return f"Pandora Level{self.level}DataBase"
 
     @property
-    def n_files_to_process(self):
-        self.cur.execute(
-            f"""SELECT COUNT()
-                FROM level{self.level - 1}.pointings AS src
-                LEFT JOIN pointings AS dst
-                        ON src.filename = dst.filename
-                WHERE (src.badchecksum = 0 AND src.baddatasum = 0)
-                    AND (dst.filename IS NULL);""",
-        )
-        nrows = self.cur.fetchone()[0]
-        return nrows
-
-    def get_x_to_process(self, x, nchunks=None, chunk=None):
-        # Compute limit/offset if chunking is requested
-        if nchunks is not None and chunk is not None:
-            # total files
-            N = self.n_files_to_process
-            chunk_size = int(np.ceil(N / nchunks))
-            offset = chunk * chunk_size
-            limit = chunk_size
-        else:
-            limit = None
-            offset = None
-
-        base_sql = f"""
-            SELECT {x}
+    def _to_process_sql(self):
+        # Files with valid checksums not yet in this database.
+        return f"""
             FROM level{self.level - 1}.pointings AS src
             LEFT JOIN pointings AS dst
                  ON src.filename = dst.filename
             WHERE (src.badchecksum = 0 AND src.baddatasum = 0)
               AND (dst.filename IS NULL)
         """
-
-        params = []  # [__version__]
-
-        # Add LIMIT/OFFSET only if chunking
-        if limit is not None:
-            base_sql += " LIMIT ? OFFSET ?"
-            params.extend([limit, offset])
-
-        self.cur.execute(base_sql, tuple(params))
-        rows = self.cur.fetchall()
-
-        if rows:
-            return rows
-        else:
-            return []
 
     def get_files_to_process(self, nchunks=None, chunk=None):
         files = self.get_x_to_process(
@@ -198,7 +165,7 @@ class Level1DataBase(ArchiveDataBaseMixins, DataBaseMixins):
                     path,
                 )
                 self.add_entry(entry)
-            except:
+            except Exception:
                 logger.exception(
                     f"Error while increasing Level {self.level - 1} to Level {self.level} [{path}]. Skipping."
                 )

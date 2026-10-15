@@ -4,6 +4,7 @@
 import os
 import sqlite3
 import stat
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +27,46 @@ def _process_time(time):
         except ValueError:
             raise ValueError("`time_range` must be in JD.")
     return time
+
+
+def file_chunk(filename, nchunks):
+    """Chunk (0 to `nchunks` - 1) that a file belongs to.
+
+    From a stable hash of the file name, so a file stays in its chunk
+    however many other files are still waiting to be processed.
+    """
+    return zlib.crc32(Path(filename).name.encode()) % nchunks
+
+
+class ProcessingQueueMixins:
+    """Selection of the files a processing database still has to process.
+
+    Classes define `_to_process_sql`, the ``FROM ... WHERE ...`` part of a
+    query over the source table ``src`` (joined with this database's table
+    ``dst``) that selects the files to process.
+    """
+
+    @property
+    def n_files_to_process(self):
+        self.cur.execute(f"SELECT COUNT() {self._to_process_sql}")
+        return self.cur.fetchone()[0]
+
+    def get_x_to_process(self, x, nchunks=None, chunk=None):
+        """Columns `x` of the files to process, in file name order.
+
+        With `nchunks` and `chunk`, only the files of that chunk (see
+        `file_chunk`), so separate runs share the files without overlap.
+        """
+        self.cur.execute(
+            f"SELECT src.filename, {x} {self._to_process_sql} "
+            "ORDER BY src.filename"
+        )
+        rows = self.cur.fetchall()
+        if nchunks is not None and chunk is not None:
+            rows = [
+                row for row in rows if file_chunk(row[0], nchunks) == chunk
+            ]
+        return [row[1:] for row in rows]
 
 
 class DataBaseMixins:

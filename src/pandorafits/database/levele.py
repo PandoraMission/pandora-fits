@@ -5,19 +5,16 @@
 import os
 import sqlite3
 import stat
-from pathlib import Path
 
 # Third-party
-import numpy as np
 from astropy.io import fits
 from astropy.table import Table
 from astropy.time import Time
 
 from .. import LEVEL0_DIR, LEVELE_DIR, __version__, logger
 from ..utils import get_dpc_hashkey
-from . import is_banned
 from .engineering import EngineeringDataBase, PayloadDataBase
-from .mixins import DataBaseMixins
+from .mixins import DataBaseMixins, ProcessingQueueMixins
 
 
 def get_engineering_fits(time_range):
@@ -36,13 +33,16 @@ def get_engineering_fits(time_range):
     return fits.HDUList(hdulist)
 
 
-class LevelEDataBase(DataBaseMixins):
-    """Database for managing Level 1 files."""
+class LevelEDataBase(ProcessingQueueMixins, DataBaseMixins):
+    """Database for managing Level E (engineering) files."""
 
     table_name = "pointings"
     db_path = os.path.join(LEVELE_DIR, "levele.db")
     level = "E"
     level_dir = LEVELE_DIR
+    # Telemetry can arrive after the science data, so an engineering file
+    # made within this many days of its observation is made again.
+    stale_days = 15
 
     _sql_key_dict = {
         "filename": "TEXT PRIMARY KEY",
@@ -58,59 +58,28 @@ class LevelEDataBase(DataBaseMixins):
         self.cur.execute(
             f"ATTACH DATABASE '{os.path.join(LEVEL0_DIR, 'level0.db')}' AS level0"
         )
+        # A remade engineering file replaces its earlier entry.
+        self.update_str = self.update_str.replace(
+            "INSERT INTO", "INSERT OR REPLACE INTO", 1
+        )
 
     def __repr__(self):
         return f"Pandora Level{self.level}DataBase"
 
     @property
-    def n_files_to_process(self):
-        self.cur.execute(
-            f"""SELECT COUNT()
-                FROM level0.pointings AS src
-                LEFT JOIN pointings AS dst
-                        ON src.filename = dst.filename
-                WHERE (src.badchecksum = 0 AND src.baddatasum = 0)
-                    AND (dst.filename IS NULL);""",
-        )
-        nrows = self.cur.fetchone()[0]
-        return nrows
-
-    def get_x_to_process(self, x, nchunks=None, chunk=None):
-        # Compute limit/offset if chunking is requested
-        if nchunks is not None and chunk is not None:
-            # total files
-            N = self.n_files_to_process
-            chunk_size = int(np.ceil(N / nchunks))
-            offset = chunk * chunk_size
-            limit = chunk_size
-        else:
-            limit = None
-            offset = None
-
-        base_sql = f"""
-            SELECT {x}
+    def _to_process_sql(self):
+        # Files with valid checksums that have no engineering file yet, or
+        # whose engineering file was made too soon after the observation.
+        return f"""
             FROM level0.pointings AS src
             LEFT JOIN pointings AS dst
                  ON src.filename = dst.filename
             WHERE (src.badchecksum = 0 AND src.baddatasum = 0)
-              AND (dst.filename IS NULL)
-              OR ((dst.create_time - dst.jd) < 15)
+              AND (
+                  dst.filename IS NULL
+                  OR (dst.create_time - dst.jd) < {self.stale_days}
+              )
         """
-
-        params = []  # [__version__]
-
-        # Add LIMIT/OFFSET only if chunking
-        if limit is not None:
-            base_sql += " LIMIT ? OFFSET ?"
-            params.extend([limit, offset])
-
-        self.cur.execute(base_sql, tuple(params))
-        rows = self.cur.fetchall()
-
-        if rows:
-            return rows
-        else:
-            return []
 
     def get_files_to_process(self, nchunks=None, chunk=None):
         files = self.get_x_to_process(
@@ -129,19 +98,6 @@ class LevelEDataBase(DataBaseMixins):
     #         nchunks=nchunks,
     #         chunk=chunk,
     #     )
-
-    def check_filename_needs_processing(self, filename, level=0):
-        fname = os.path.basename(filename)
-        fname = Path(filename).name
-        if is_banned(filename):
-            # Automatically skip
-            return False
-
-        self.cur.execute(
-            f"SELECT pfsoftver FROM 'level0.pointings WHERE filename=?",
-            (fname,),
-        )
-        return self.cur.fetchone() is None
 
     def get_entry(self, filename):
         fname = os.path.basename(filename)
@@ -204,7 +160,7 @@ class LevelEDataBase(DataBaseMixins):
                     path,
                 )
                 self.add_entry(entry)
-            except:
+            except Exception:
                 logger.exception(
                     f"Error while creating engineering file. Skipping."
                 )
