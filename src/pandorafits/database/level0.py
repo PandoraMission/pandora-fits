@@ -25,7 +25,12 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from .. import DATA_DIR, LEVEL0_DIR, __version__, logger
 from ..roll import get_roll
-from ..utils import convert_time, get_dpc_hashkey, get_exposure_time
+from ..utils import (
+    CircularMeanAggregate,
+    convert_time,
+    get_dpc_hashkey,
+    get_exposure_time,
+)
 from . import DPC_KEYS
 from .astrometry import AstrometryDataBase
 from .mixins import DataBaseMixins
@@ -377,14 +382,16 @@ class Level0DataBase(DataBaseMixins):
         self.cur.execute(
             f"ATTACH DATABASE '{LEVEL0_DIR}/astrometry.db' AS astrometry"
         )
+        # RA and roll wrap at 360 deg, so they are averaged on the circle.
+        self.conn.create_aggregate("CIRCULAR_AVG", 1, CircularMeanAggregate)
 
         # If there are nans in the targ_ra, targ_dec, fill them in with the most recent values from the SOC before the data.
         sql = f"""WITH matched AS (
         SELECT
             p.rowid AS p_rowid,
-            AVG(a.ra) AS mean_ra,
+            CIRCULAR_AVG(a.ra) AS mean_ra,
                     AVG(a.dec) AS mean_dec,
-                    AVG(a.roll) AS mean_roll
+                    CIRCULAR_AVG(a.roll) AS mean_roll
                 FROM pointings AS p
                 JOIN astrometry AS a
                 ON a.start = p.start

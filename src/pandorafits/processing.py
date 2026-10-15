@@ -19,6 +19,7 @@ from pandoraref import __version__ as prversion
 
 from . import __version__, logger
 from .database import AstrometryDataBase, Level0DataBase
+from .utils import circular_median_deg
 
 # Catalog column of the magnitude named by the MAG_SRC keyword of a pandoraref
 # magnitude conversion product.
@@ -213,8 +214,11 @@ class ProcessingMixins:
                 _, ra, dec, rot = self.astrometry
                 k = np.isfinite(ra) & np.isfinite(dec) & np.isfinite(rot)
                 k &= (ra != 0) & (dec != 0) & (rot != 0)
+                # RA and roll wrap at 360 deg.
                 wcs = self.reference.get_wcs_from_VITL(
-                    np.median(ra[k]), np.median(dec[k]), np.median(rot[k])
+                    circular_median_deg(ra[k]),
+                    np.median(dec[k]),
+                    circular_median_deg(rot[k]),
                 )
         else:
             with warnings.catch_warnings():

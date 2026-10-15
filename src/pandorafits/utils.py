@@ -1,5 +1,6 @@
 # Standard library
 import hashlib
+import math
 import random
 import string
 from datetime import timedelta
@@ -44,6 +45,63 @@ def convert_time(corstime, finetime):
         )
     ).utc
     return time
+
+
+def wrap_deg(angle):
+    """Wrap angles [deg] to [-180, 180)."""
+    return (np.asarray(angle) + 180) % 360 - 180
+
+
+def circular_mean_deg(angle):
+    """Mean of angles [deg] on the circle, in [0, 360).
+
+    RA and roll wrap at 360 deg, where an arithmetic mean of e.g. 359 and 1
+    deg gives 180. NaNs are ignored; returns NaN if no angle is finite.
+    """
+    angle = np.radians(np.asarray(angle, dtype=float))
+    angle = angle[np.isfinite(angle)]
+    if angle.size == 0:
+        return np.nan
+    mean = np.arctan2(np.sin(angle).mean(), np.cos(angle).mean())
+    return float(np.degrees(mean) % 360)
+
+
+def circular_median_deg(angle):
+    """Median of angles [deg] on the circle, in [0, 360).
+
+    The median of the offsets from the circular mean, wrapped to
+    [-180, 180), added back to the mean. Like a median, it is robust to a
+    few outlying samples. NaNs are ignored; returns NaN if none is finite.
+    """
+    angle = np.asarray(angle, dtype=float)
+    angle = angle[np.isfinite(angle)]
+    if angle.size == 0:
+        return np.nan
+    center = circular_mean_deg(angle)
+    return float((center + np.median(wrap_deg(angle - center))) % 360)
+
+
+class CircularMeanAggregate:
+    """SQLite aggregate for `circular_mean_deg`.
+
+    Register with ``connection.create_aggregate("CIRCULAR_AVG", 1,
+    CircularMeanAggregate)``. NULLs are ignored, as by ``AVG``.
+    """
+
+    def __init__(self):
+        self.sin_sum, self.cos_sum, self.count = 0.0, 0.0, 0
+
+    def step(self, angle):
+        if angle is None or not math.isfinite(angle):
+            return
+        self.sin_sum += math.sin(math.radians(angle))
+        self.cos_sum += math.cos(math.radians(angle))
+        self.count += 1
+
+    def finalize(self):
+        if self.count == 0:
+            return None
+        return math.degrees(math.atan2(self.sin_sum, self.cos_sum)) % 360
 
 
 def get_dpc_hashkey(targ_id, ra, dec):

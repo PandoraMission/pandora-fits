@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pandoraspacecraft as psc
-from astropy.coordinates import Distance, SkyCoord
+from astropy.coordinates import Distance, SkyCoord, angular_separation
 
 # import pandas as pd
 from astropy.io import fits
@@ -23,12 +23,14 @@ from .inspect import inspect_file
 from .processing import ProcessingMixins
 from .utils import (
     BITPIX_DICT,
+    circular_mean_deg,
     convert_time,
     generate_random_bintable_values,
     generate_random_table_values,
     get_excel_sheet,
     get_exposure_time,
     get_read_time,
+    wrap_deg,
 )
 
 __all__ = ["FITSTemplateException", "FITSValueException", "PandoraHDUList"]
@@ -592,15 +594,16 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
                     )
                 )
                 continue
+            # RA and roll wrap at 360 deg.
             avg_ra, avg_dec, avg_rot = (
-                np.nanmean(ra[k]),
+                circular_mean_deg(ra[k]),
                 np.nanmean(dec[k]),
-                np.nanmean(rot[k]),
+                circular_mean_deg(rot[k]),
             )
             err_ra, err_dec, err_rot = (
-                np.nanmedian(np.abs(ra[k] - avg_ra)),
+                np.nanmedian(np.abs(wrap_deg(ra[k] - avg_ra))),
                 np.nanmedian(np.abs(dec[k] - avg_dec)),
-                np.nanmedian(np.abs(rot[k] - avg_rot)),
+                np.nanmedian(np.abs(wrap_deg(rot[k] - avg_rot))),
             )
             df.append(
                 pd.DataFrame(
@@ -621,9 +624,14 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         t = self.time.jd
         df["jd"] = t
         df["exptime"] = self.exptime.value
-        df["target_sep"] = np.hypot(
-            df.avg_ra.values - self.coord.ra.value,
-            df.avg_dec.values - self.coord.dec.value,
+        # Angular separation [deg] between the pointing and the target.
+        df["target_sep"] = np.degrees(
+            angular_separation(
+                np.radians(df.avg_ra.values),
+                np.radians(df.avg_dec.values),
+                self.coord.ra.radian,
+                self.coord.dec.radian,
+            )
         )
         df["vitl_frames_count"] = count
         df["vitl_missing_frames"] = missing
