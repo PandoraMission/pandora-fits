@@ -1,6 +1,5 @@
 # Standard library
 import os
-import sqlite3
 import warnings
 from pathlib import Path
 
@@ -27,50 +26,70 @@ JSONS = [
 ]
 
 
-def get_engineering_entry(filename):
+def _read_telemetry_json(filename):
+    """One telemetry JSON export as a table indexed by JD (UTC).
+
+    Values stored as ``{"val": ...}`` are unpacked. Packet times
+    (``packetScTimeTai``) are in TAI and converted to UTC to match the other
+    databases; packets without a time are dropped, and repeated times keep
+    their first packet.
+    """
+    df = pd.read_json(filename)
+    df = df.map(
+        lambda x: x["val"] if isinstance(x, dict) and "val" in x else x
+    )
+    tai = df["primaryKey"].map(
+        lambda x: (
+            x["packetScTimeTai"]
+            if isinstance(x, dict) and "packetScTimeTai" in x
+            else None
+        )
+    )
+    df = df[tai.notna().values].drop(columns="primaryKey")
+    df.index = Time(list(tai[tai.notna()]), format="isot", scale="tai").utc.jd
+    df.index.name = "jd"
+    return df[~df.index.duplicated(keep="first")]
+
+
+def get_engineering_entry(day_folder):
+    """Engineering telemetry of one day folder, one row per packet time."""
     with warnings.catch_warnings(record=True) as w:  # noqa
         warnings.simplefilter("always")  # capture all warnings
-        dfs = []
-        for jsonname in JSONS:
-            df = pd.read_json(filename + f"/{jsonname}")
-            df = df.map(
-                lambda x: x["val"] if isinstance(x, dict) and "val" in x else x
-            )
-            df["JD"] = df["primaryKey"].map(
-                lambda x: (
-                    Time(x["packetScTimeTai"], format="isot").jd
-                    if isinstance(x, dict) and "packetScTimeTai" in x
-                    else x
-                )
-            )
-            df.drop("primaryKey", axis="columns", inplace=True)
-            df.set_index("JD", inplace=True)
-            dfs.append(df)
-        df = pd.concat(dfs, axis=1)
-        df = df.reset_index()
-        df.drop_duplicates("JD", keep="first", inplace=True)
-        return [i[1].values for i in df.iterrows()]
+        dfs = [_read_telemetry_json(Path(day_folder) / name) for name in JSONS]
+        return pd.concat(dfs, axis=1).reset_index()
 
 
 def get_payload_entry(filename):
+    """Payload telemetry of one JSON export, one row per packet time."""
     with warnings.catch_warnings(record=True) as w:  # noqa
         warnings.simplefilter("always")  # capture all warnings
-        df = pd.read_json(filename)
-        df = df.map(
-            lambda x: x["val"] if isinstance(x, dict) and "val" in x else x
-        )
-        df["JD"] = df["primaryKey"].map(
-            lambda x: (
-                Time(x["packetScTimeTai"], format="isot").jd
-                if isinstance(x, dict) and "packetScTimeTai" in x
-                else x
-            )
-        )
-        df.drop("primaryKey", axis="columns", inplace=True)
-        df.set_index("JD", inplace=True)
-        df = df.reset_index()
-        df.drop_duplicates("JD", keep="first", inplace=True)
-        return [i[1].values for i in df.iterrows()]
+        return _read_telemetry_json(filename).reset_index()
+
+
+def _sql_value(value):
+    """A value sqlite3 can store: missing values as NULL, NumPy scalars as
+    Python scalars (sqlite3 cannot store NumPy integers)."""
+    if pd.isna(value):
+        return None
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def _day_files(json_name):
+    """The telemetry export of each day folder below
+    ``DATA_DIR/engineering_data``, skipping staging folders.
+
+    A day can be downloaded more than once; the path that sorts last is kept.
+    """
+    root = Path(DATA_DIR) / "engineering_data"
+    days = {}
+    for path in sorted(root.rglob(json_name)):
+        folders = path.relative_to(root).parts[:-1]
+        if any("staging" in folder for folder in folders):
+            continue
+        days[path.parent.name] = path
+    return [days[day] for day in sorted(days)]
 
 
 class EngineeringDataBase(DataBaseMixins):
@@ -137,13 +156,14 @@ class EngineeringDataBase(DataBaseMixins):
 
     def __init__(self):
         super().__init__()
-        key_string = ", ".join(
-            [f"{key}" for key, item in self._sql_key_dict.items()]
+        columns = list(self._sql_key_dict)
+        # A stale day is ingested again, so its packets replace stored ones.
+        updates = ", ".join(f"{key} = excluded.{key}" for key in columns[1:])
+        self.update_str = (
+            f"INSERT INTO {self.table_name} ({', '.join(columns)}) "
+            f"VALUES ({', '.join(['?'] * len(columns))}) "
+            f"ON CONFLICT (jd) DO UPDATE SET {updates}"
         )
-        value_string = ", ".join(["?"] * len(self._sql_key_dict))
-        self.update_str = f"""INSERT INTO {self.table_name} ({key_string}) VALUES ({value_string}) ON CONFLICT (JD) DO NOTHING"""
-        self.conn = sqlite3.connect(self.db_path)
-        self.cur = self.conn.cursor()
         self.cur.execute(
             """
             CREATE TABLE IF NOT EXISTS completed (eng_day FLOAT PRIMARY KEY, updated_day FLOAT)
@@ -151,35 +171,43 @@ class EngineeringDataBase(DataBaseMixins):
         )
         self.conn.commit()
 
+    def _rows(self, df):
+        """Table rows in this database's column order, as Python values."""
+        df = df.reindex(columns=list(self._sql_key_dict))
+        return [
+            tuple(_sql_value(value) for value in row)
+            for row in df.itertuples(index=False)
+        ]
+
     def crawl_and_add(self):
-        root = DATA_DIR + "/engineering_data/"
-        paths = np.sort(
-            [str(path) for path in Path(root).rglob("Analogs.json")]
-        )
-        paths = np.asarray([path for path in paths if "staging" not in path])
-        path_idxs = np.unique(
-            [p.split("/")[-1] for p in paths[::-1]], return_index=True
-        )[1]
-        paths = np.sort(paths[::-1][path_idxs])
         with logging_redirect_tqdm():
-            for path in tqdm(paths, desc="Engineering files"):
+            for path in tqdm(
+                _day_files("Analogs.json"), desc="Engineering files"
+            ):
                 if not self.check_if_completed(path):
-                    rows = get_engineering_entry(
-                        "/".join(path.split("/")[:-1])
+                    self.add_entries(
+                        self._rows(get_engineering_entry(path.parent))
                     )
-                    self.add_entries(rows)
                     self.update_completed(path)
 
+    @staticmethod
+    def _day_jd(path):
+        """JD of the day folder holding a telemetry export."""
+        return Time(Path(path).parent.name, format="isot").jd
+
     def check_if_completed(self, path):
-        t_eng = Time(path.split("/")[-2], format="isot").jd
-        sql = f"SELECT updated_day FROM completed WHERE eng_day = {t_eng}"
-        df = pd.read_sql_query(sql, self.conn)
+        t_eng = self._day_jd(path)
+        df = pd.read_sql_query(
+            "SELECT updated_day FROM completed WHERE eng_day = ?",
+            self.conn,
+            params=(t_eng,),
+        )
         if len(df) > 0:
             if (df.updated_day.values - t_eng) < 15:
                 logger.info(f"{path} may be stale, rewriting to database.")
                 # Delete the line
                 self.conn.execute(
-                    f"DELETE FROM completed WHERE eng_day = {t_eng}",
+                    "DELETE FROM completed WHERE eng_day = ?", (t_eng,)
                 )
                 self.conn.commit()
                 return False
@@ -190,8 +218,10 @@ class EngineeringDataBase(DataBaseMixins):
             return False
 
     def update_completed(self, path):
-        update_str = f"""INSERT INTO completed (eng_day, updated_day) VALUES ({Time(path.split("/")[-2], format="isot").jd}, {Time.now().jd})"""  # noqa
-        self.cur.execute(update_str)
+        self.cur.execute(
+            "INSERT INTO completed (eng_day, updated_day) VALUES (?, ?)",
+            (self._day_jd(path), Time.now().jd),
+        )
         self.conn.commit()
 
 
@@ -238,18 +268,10 @@ class PayloadDataBase(EngineeringDataBase):
         return "Pandora PayloadDataBase"
 
     def crawl_and_add(self):
-        root = DATA_DIR + "/engineering_data/"
-        paths = np.sort(
-            [str(path) for path in Path(root).rglob("PayloadTelemetry.json")]
-        )
-        paths = np.asarray([path for path in paths if "staging" not in path])
-        path_idxs = np.unique(
-            [p.split("/")[-1] for p in paths[::-1]], return_index=True
-        )[1]
-        paths = np.sort(paths[::-1][path_idxs])
         with logging_redirect_tqdm():
-            for path in tqdm(paths, desc="Payload files"):
+            for path in tqdm(
+                _day_files("PayloadTelemetry.json"), desc="Payload files"
+            ):
                 if not self.check_if_completed(path):
-                    rows = get_payload_entry(path)
-                    self.add_entries(rows)
+                    self.add_entries(self._rows(get_payload_entry(path)))
                     self.update_completed(path)

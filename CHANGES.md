@@ -19,6 +19,7 @@ Notable changes to `pandorafits`, newest version first. Every change that affect
 
 - Database crawls on Windows: Level 0 entries stored the full path as the file name and an empty folder, so re-crawls failed and duplicate downloads were not skipped. Rebuild Level 0 databases made on Windows.
 - Files in `engineering_data` or `staging` folders are skipped by the crawls, as intended; banned folder names are now a separate list, `BANFOLDERS`, matched only against folders below `DATA_DIR`.
+- Engineering and payload telemetry databases ingest every day (only one day was kept), store UTC times (packet times are TAI; they were stored 37 s late), match columns by name, update days that are re-ingested, and work on Windows. Rebuild these databases.
 - `writeto` writes fresh checksums by default and sets `NEXTEND`; the Level 2 `ASTROMETRY` header no longer repeats `EXTNAME` or carries stale checksums.
 - A calibration step (bias, dark, flat, ...) is not applied twice.
 - `SNRInspector` no longer crashes on an empty target aperture; an empty aperture is logged.
