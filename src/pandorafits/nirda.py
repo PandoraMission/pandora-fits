@@ -460,26 +460,29 @@ class NIRDALevel1HDUList(NIRDALevel0HDUList):
         return (self["APERTURE"].data == 0) & (self["QUALITY"].data == 0)
 
     def get_bkg(self):
+        """Per-frame, per-row background with shape (frame, row).
+
+        Each value is the median of the row's background pixels: outside
+        the scene apertures, unflagged in QUALITY, away from the two
+        subarray edge columns on each side, and less than 5 sigma above
+        their row's median in the median image. The outermost columns read
+        ~3x the sky and are not flagged in QUALITY. The clip is relative to
+        each row because whole rows can be offset (the edge rows, 1/f
+        noise); every row keeps background pixels.
+        """
         d = self["SCIENCE"].data
+        sky = self.bkg_aperture.copy()
+        sky[:, :2] = False
+        sky[:, -2:] = False
         thumb = np.median(d, axis=0)
-        thumb -= np.median(np.ma.masked_array(thumb, self.aperture))
-        thumb /= 1.486 * np.nanmedian(
-            np.ma.masked_array(
-                np.hypot(*np.gradient(thumb * np.sqrt(2))), self.aperture
-            )
+        row_residual = thumb - np.nanmedian(
+            np.where(sky, thumb, np.nan), axis=1, keepdims=True
         )
-        bkgaper = (thumb < 5) & (self.bkg_aperture)
-        bkgaper[:2] = False
-        bkgaper[-2:] = False
-        bkgaper[:, :2] = False
-        bkgaper[:, -2:] = False
-        bkg = np.nanmedian(
-            np.ma.masked_array(
-                d, (~self.bkg_aperture[None, :, :]) * np.ones(d.shape, bool)
-            ),
-            axis=2,
+        sigma = 1.4826 * np.nanmedian(
+            np.abs(np.where(sky, row_residual, np.nan))
         )
-        return bkg
+        bkgaper = sky & (row_residual < 5 * sigma)
+        return np.nanmedian(np.where(bkgaper, d, np.nan), axis=2)
 
     def __to_l2__(self):
         return NIRDALevel2HDUList(self)

@@ -422,8 +422,8 @@ class VISDALevel1HDUList(VISDALevel0HDUList):
     def get_bkg(self):
         d = self["SCIENCE"].data
         thumb = np.median(d, axis=0)
-        thumb -= np.median(np.ma.masked_array(thumb, self.aperture))
-        thumb /= 1.486 * np.nanmedian(
+        thumb -= np.ma.median(np.ma.masked_array(thumb, self.aperture))
+        thumb /= 1.486 * np.ma.median(
             np.ma.masked_array(
                 np.hypot(*np.gradient(thumb * np.sqrt(2))), self.aperture
             )
