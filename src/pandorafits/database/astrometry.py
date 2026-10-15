@@ -19,7 +19,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from .. import DATA_DIR, LEVEL0_DIR, __version__
-from ..utils import convert_time, get_dpc_hashkey
+from ..utils import convert_time, get_dpc_hashkey, unique_by_name
 from .mixins import DataBaseMixins
 
 
@@ -226,10 +226,7 @@ class AstrometryDataBase(DataBaseMixins):
                         if self.check_filename_needs_processing(str(path))
                     ]
                 )
-                path_idxs = np.unique(
-                    [p.split("/")[-1] for p in paths[::-1]], return_index=True
-                )[1]
-                paths = np.sort(paths[::-1][path_idxs])
+                paths = unique_by_name(paths)
                 rows = []
                 for path in tqdm(
                     paths,

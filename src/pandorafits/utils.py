@@ -4,6 +4,7 @@ import math
 import random
 import string
 from datetime import timedelta
+from pathlib import Path
 from typing import List, Union
 
 # Third-party
@@ -102,6 +103,26 @@ class CircularMeanAggregate:
         if self.count == 0:
             return None
         return math.degrees(math.atan2(self.sin_sum, self.cos_sum)) % 360
+
+
+def split_path(path):
+    """File name and directory of a path, the directory with "/" separators.
+
+    Uses the platform's separators, so Windows paths split correctly too.
+    """
+    path = Path(path)
+    return path.name, path.parent.as_posix()
+
+
+def unique_by_name(paths):
+    """Sorted paths with one path per file name.
+
+    The same file can be downloaded to several folders; for each file name
+    the path that sorts last is kept.
+    """
+    paths = np.sort(np.asarray(paths, dtype=str))[::-1]
+    names = [Path(path).name for path in paths]
+    return np.sort(paths[np.unique(names, return_index=True)[1]])
 
 
 def get_dpc_hashkey(targ_id, ra, dec):

@@ -30,6 +30,8 @@ from ..utils import (
     convert_time,
     get_dpc_hashkey,
     get_exposure_time,
+    split_path,
+    unique_by_name,
 )
 from . import DPC_KEYS
 from .astrometry import AstrometryDataBase
@@ -88,11 +90,12 @@ def get_entry(filename, checksums=False):
             for key in ["FINETIME", "CORSTIME", "INSTRMNT"]:
                 if key not in hdr:
                     return
+            name, directory = split_path(filename)
             return (
-                filename.split("/")[-1],
-                filename.split("/")[-1],
-                "/".join(filename.split("/")[:-1]),
-                "/".join(filename.split("/")[:-1]),
+                name,
+                name,
+                directory,
+                directory,
                 hdr["CRSOFTV"],
                 __version__,
                 hdr["FINETIME"],
@@ -264,10 +267,7 @@ class Level0DataBase(DataBaseMixins):
                     if self.check_filename_needs_processing(str(path))
                 ]
             )
-            path_idxs = np.unique(
-                [p.split("/")[-1] for p in paths[::-1]], return_index=True
-            )[1]
-            paths = np.sort(paths[::-1][path_idxs])
+            paths = unique_by_name(paths)
             rows = []
             with logging_redirect_tqdm():
                 for path in tqdm(paths, desc=f"{image_type} files"):
