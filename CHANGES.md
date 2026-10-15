@@ -1,0 +1,29 @@
+# Changes
+
+Notable changes to `pandorafits`, newest version first. Every change that affects users, file contents or the API gets a line under the version in development.
+
+## v0.10.0 (in development)
+
+### Changed Level 2 values (regenerate Level 2 files)
+
+- NIRDA `BACKGROUND` leaves out the subarray edge columns and clips sources per row; it was 0.6 to 1.0 ct/s/pixel too high.
+- `APERTURE`, `MODEL_IMAGE` and `CONTAM`/`TOTAP`/`COMPLTE` scale the scene stars by each detector's own band and zero point (2MASS J for NIRDA, Gaia BP for VISDA, from pandoraref's `MAG_SRC`). Stars without that magnitude get zero flux, counted in the new `APERTURE` cards `MAGSRC` and `NOMAG`.
+- The NIRDA `aperture` property keeps every row and excludes only QUALITY-flagged pixels (affects `APCOMP1`, `TARGCOMP`, `LC_MED`).
+- Truncated NIRDA files keep every complete integration; their `FRMSTOT` is a frame count.
+- The stored WCS is the one used for `POSX`/`POSY`, `VECTORS` and `APERTURE`.
+- RA and roll are averaged on the circle (Level 0 database, `VECTORS`, WCS center); `target_sep` is the angular separation on the sky (changes `ONTARG`, `TARGTIME`).
+- SOC report scores: `TARGCENT` replaced by `TCENT10`/`TCENT20`/`TCENT30`; `TARGCOMP` compares fractions; missing catalog values are written as -99 (magnitudes) or -1 (Teff, log g).
+
+### Fixed
+
+- `writeto` writes fresh checksums by default and sets `NEXTEND`; the Level 2 `ASTROMETRY` header no longer repeats `EXTNAME` or carries stale checksums.
+- A calibration step (bias, dark, flat, ...) is not applied twice.
+- `SNRInspector` no longer crashes on an empty target aperture; an empty aperture is logged.
+- `get_bkg` used `np.median` on masked arrays, which ignores the mask.
+- `_append_wavelength` without `VECTORS`, and `panels_to_cube` for borderless panels.
+
+### Added
+
+- Demos: `demos/01_visda_reduction.ipynb`, `02_nirda_reduction.ipynb`, `03_visit_analysis.ipynb`.
+- `utils.wrap_deg`, `circular_mean_deg`, `circular_median_deg`, `CircularMeanAggregate`; `processing.get_scene_flux`, `DetectorSkyScene`.
+- Tests for the above; the dummy-file tests write to a temporary folder.
