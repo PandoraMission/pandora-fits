@@ -568,12 +568,33 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         else:
             raise ValueError("No `ASTROMETRY` extension.")
 
+    @property
+    def exposure_windows(self):
+        """Start and end time of each exposure.
+
+        ``TIME`` marks the point of each exposure given by the TIME header's
+        ``TIMEPIXR`` (0: start, 0.5: middle). Files without it were made
+        before ``TIME`` was the middle of the exposure and are treated as
+        start times.
+        """
+        time, exptime = self.time, self.exptime
+        timepixr = 0.5
+        if "TIME" in self:
+            timepixr = self["TIME"].header.get("TIMEPIXR", 0.0)
+            if isinstance(timepixr, bool) or not isinstance(
+                timepixr, (int, float)
+            ):
+                timepixr = 0.0
+        start = time - timepixr * exptime
+        return start, start + exptime
+
     def get_position_data(self):
         et, ra, dec, rot = self.astrometry
         df = []
         count, missing = [], []
-        for t, dt in zip(self.time, self.exptime):
-            j = (et >= (t)) & (et < (t + dt))
+        # Attitude samples are averaged over each exposure.
+        for window_start, window_end in zip(*self.exposure_windows):
+            j = (et >= window_start) & (et < window_end)
             k = np.isfinite(ra) & np.isfinite(dec) & np.isfinite(rot)
             k &= (ra != 0) & (dec != 0) & (rot != 0)
             count.append(len(k[j]))

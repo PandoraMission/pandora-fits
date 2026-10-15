@@ -6,6 +6,7 @@ Notable changes to `pandorafits`, newest version first. Every change that affect
 
 ### Changed Level 2 values (regenerate Level 2 files)
 
+- `TIME` is the middle of each exposure for NIRDA (1.9 s earlier than before) and VISDA (half a co-add later), marked by `TIMEPIXR = 0.5` in the `TIME` header; the pointing in `VECTORS` is averaged over each exposure. Regenerate Level 1 files too; files without `TIMEPIXR` use the old convention.
 - NIRDA `BACKGROUND` leaves out the subarray edge columns and clips sources per row; it was 0.6 to 1.0 ct/s/pixel too high.
 - `APERTURE`, `MODEL_IMAGE` and `CONTAM`/`TOTAP`/`COMPLTE` scale the scene stars by each detector's own band and zero point (2MASS J for NIRDA, Gaia BP for VISDA, from pandoraref's `MAG_SRC`). Stars without that magnitude get zero flux, counted in the new `APERTURE` cards `MAGSRC` and `NOMAG`.
 - The NIRDA `aperture` property keeps every row and excludes only QUALITY-flagged pixels (affects `APCOMP1`, `TARGCOMP`, `LC_MED`).
@@ -25,5 +26,5 @@ Notable changes to `pandorafits`, newest version first. Every change that affect
 ### Added
 
 - Demos: `demos/01_visda_reduction.ipynb`, `02_nirda_reduction.ipynb`, `03_visit_analysis.ipynb`.
-- `utils.wrap_deg`, `circular_mean_deg`, `circular_median_deg`, `CircularMeanAggregate`; `processing.get_scene_flux`, `DetectorSkyScene`.
+- `utils.wrap_deg`, `circular_mean_deg`, `circular_median_deg`, `CircularMeanAggregate`; `processing.get_scene_flux`, `DetectorSkyScene`; `PandoraHDUList.exposure_windows`; `nirda.get_nirda_read_mid_times`.
 - Tests for the above; the dummy-file tests write to a temporary folder.

@@ -46,6 +46,11 @@ def get_nirda_frame_times(hdr):
     )
 
 
+def get_nirda_read_mid_times(hdr):
+    """Middle of each read: its frame start time plus half a frame."""
+    return get_nirda_frame_times(hdr) + hdr["FRMTIME"] * u.millisecond / 2
+
+
 def get_nirda_read_frame_indexes(hdr):
     totframes = 0
     times = []
@@ -129,7 +134,16 @@ class NIRDALevel0HDUList(PandoraHDUList):
             fits.ImageHDU(
                 time.jd,
                 name="TIME",
-                header=fits.Header([("FRAME", "JD", "Time frame is JD")]),
+                header=fits.Header(
+                    [
+                        ("FRAME", "JD", "Time frame is JD"),
+                        (
+                            "TIMEPIXR",
+                            0.5,
+                            "TIME is the middle of each exposure",
+                        ),
+                    ]
+                ),
             )
         )
         self.append(
@@ -190,14 +204,15 @@ class NIRDALevel0HDUList(PandoraHDUList):
             self["SCIENCE"].header["NAXIS2"],
             self["SCIENCE"].header["NAXIS1"],
         )
-        t = get_nirda_frame_times(hdr).reshape(shape[:-2])
+        t = get_nirda_read_mid_times(hdr).reshape(shape[:-2])
         exptime = get_nirda_ramp_times(hdr).reshape(shape[:-2]) * (
             hdr["FRMTIME"] * u.millisecond
         ).to(u.second)
         I, _, _ = np.mgrid[: hdr["INTEGRTS"], : hdr["GRPS"], : hdr["READS"]]
 
         if hdr["GRPSAVGD"] == 1:
-            t = t[:, :, 0][:, :, None]
+            # An averaged group is stamped at the mean time of its reads.
+            t = Time(t.jd.mean(axis=2)[:, :, None], format="jd")
             exptime = exptime.mean(axis=2)[:, :, None]
             I = I[:, :, 0][:, :, None]
             data = data.reshape((shape[0], shape[1], 1, shape[3], shape[4]))
@@ -260,7 +275,8 @@ class NIRDALevel0HDUList(PandoraHDUList):
                 (exptime[:, -1] - exptime[:, 0])[:, None, None]
                 * u.Quantity(1, self["EXPTIME"].header["unit"])
             ),
-            Time(t[:, 1], format="jd"),
+            # Midpoint of the two resultants that are differenced.
+            Time((t[:, 0] + t[:, -1]) / 2, format="jd"),
             (exptime[:, -1] - exptime[:, 0])
             * u.Quantity(1, self["EXPTIME"].header["unit"]),
             i[:, 1],
@@ -278,16 +294,18 @@ class NIRDALevel0HDUList(PandoraHDUList):
         logger.info("Difference sampling data.")
         hdr = self[0].header
         shape = self["SCIENCE"].data.shape
+        # Each difference is stamped at the midpoint of its two resultants.
+        resultant_time = self["TIME"].data
         if (hdr["READS"] > 1) & (hdr["GRPSAVGD"] == 0):
             a = np.ones((shape[0], shape[1], shape[2] - 1), bool)
             d = np.diff(self["SCIENCE"].data.astype(float), axis=2)[a]
-            t = self["TIME"].data[:, :, 1:][a]
+            t = ((resultant_time[:, :, :-1] + resultant_time[:, :, 1:]) / 2)[a]
             exptime = np.diff(self["EXPTIME"].data, axis=2)[a]
             i = self["INTEGRATION"].data[:, :, 1:][a]
         elif hdr["GRPS"] > 1:
             a = np.ones((shape[0], shape[1] - 1, shape[2]), bool)
             d = np.diff(self["SCIENCE"].data.astype(float), axis=1)[a]
-            t = self["TIME"].data[:, 1:, :][a]
+            t = ((resultant_time[:, :-1, :] + resultant_time[:, 1:, :]) / 2)[a]
             exptime = np.diff(self["EXPTIME"].data, axis=1)[a]
             i = self["INTEGRATION"].data[:, 1:, :][a]
         else:
@@ -322,7 +340,7 @@ class NIRDALevel0HDUList(PandoraHDUList):
                 self["SCIENCE"].header["NAXIS2"],
                 self["SCIENCE"].header["NAXIS1"],
             )
-            return get_nirda_frame_times(hdr).reshape(shape[:-2])
+            return get_nirda_read_mid_times(hdr).reshape(shape[:-2])
         else:
             return Time(self["TIME"].data, format="jd")
 

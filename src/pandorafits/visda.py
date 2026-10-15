@@ -55,7 +55,16 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             fits.ImageHDU(
                 self.time.jd,
                 name="TIME",
-                header=fits.Header([("FRAME", "JD", "Time frame is JD")]),
+                header=fits.Header(
+                    [
+                        ("FRAME", "JD", "Time frame is JD"),
+                        (
+                            "TIMEPIXR",
+                            0.5,
+                            "TIME is the middle of each exposure",
+                        ),
+                    ]
+                ),
             )
         )
         self.append(
@@ -86,7 +95,8 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
     def time(self):
         if "TIME" not in self:
             dt = timedelta(seconds=self.frame_time.to(u.second).value)
-            return self.start_time + (np.arange(self.nframes) * dt)
+            # Middle of each co-add.
+            return self.start_time + ((np.arange(self.nframes) + 0.5) * dt)
         else:
             return Time(self["TIME"].data, format="jd")
 
@@ -477,7 +487,16 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
             fits.ImageHDU(
                 self.time.jd,
                 name="TIME",
-                header=fits.Header([("FRAME", "JD", "Time frame is JD")]),
+                header=fits.Header(
+                    [
+                        ("FRAME", "JD", "Time frame is JD"),
+                        (
+                            "TIMEPIXR",
+                            0.5,
+                            "TIME is the middle of each exposure",
+                        ),
+                    ]
+                ),
             )
         )
         self.append(
@@ -547,7 +566,8 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
     def time(self):
         if "TIME" not in self:
             dt = timedelta(seconds=self.frame_time.to(u.second).value)
-            return self.start_time + (np.arange(self.nframes) * dt)
+            # Middle of each co-add.
+            return self.start_time + ((np.arange(self.nframes) + 0.5) * dt)
         else:
             return Time(self["TIME"].data, format="jd")
 
