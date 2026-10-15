@@ -229,7 +229,9 @@ class ProcessingMixins:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             wcs_hdr = wcs.to_header(relax=True)
-            self[1].header.extend(wcs_hdr)
+            # Replace any earlier WCS: duplicated cards are read last-wins
+            # by astropy.wcs but first-wins on write.
+            self[1].header.update(wcs_hdr)
         x, y = wcs.world_to_pixel(self.coord)
         self[0].header["POSX"], self[0].header["POSY"] = (
             (float(x), "X [column] Pixel position of target"),
@@ -453,7 +455,15 @@ class ProcessingMixins:
         )
         ast_tab.header.extend(fits.Header([("EXTNAME", "ASTROMETRY", "")]))
         if hdr is not None:
-            ast_tab.header.extend([h for h in hdr.cards])
+            # Keep the onboard astrometric solution cards (e.g. ASCAL, AROT),
+            # but not the old name or its checksums, which no longer apply.
+            ast_tab.header.extend(
+                [
+                    card
+                    for card in hdr.cards
+                    if card.keyword not in ["EXTNAME", "CHECKSUM", "DATASUM"]
+                ]
+            )
         self.append(ast_tab)
 
     def _update_catalog_params(self):

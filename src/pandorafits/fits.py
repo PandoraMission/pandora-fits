@@ -383,8 +383,22 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
         fileobj,
         output_verify="exception",
         overwrite=False,
-        checksum=False,
+        checksum=True,
     ):
+        """Write the file, with fresh ``CHECKSUM``/``DATASUM`` cards.
+
+        ``NEXTEND`` (if present) is set to the number of extensions. Headers
+        copied from earlier levels carry checksums that no longer match, so
+        with ``checksum=False`` those cards are removed instead of written.
+        """
+        if "NEXTEND" in self[0].header:
+            self[0].header["NEXTEND"] = len(self) - 1
+        if not checksum:
+            for hdu in self:
+                for keyword in ["CHECKSUM", "DATASUM"]:
+                    hdu.header.remove(
+                        keyword, ignore_missing=True, remove_all=True
+                    )
         fits.HDUList(self).writeto(
             fileobj=fileobj,
             output_verify=output_verify,
