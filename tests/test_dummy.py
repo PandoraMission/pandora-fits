@@ -1,37 +1,24 @@
-# Standard library
-import os
-from pathlib import Path
+# Third-party
+import pytest
 
 # First-party/Local
-from pandorafits import PACKAGEDIR, logger
+from pandorafits import logger
 from pandorafits.nirda import NIRDALevel0HDUList
 from pandorafits.visda import VISDAFFILevel0HDUList, VISDALevel0HDUList
 
-TESTDIR = str(Path(PACKAGEDIR).resolve().parents[1] / "tests") + os.sep
 
-
-def test_create_dummy_data_N0():
+@pytest.mark.parametrize(
+    "hdulist_class, filename",
+    [
+        (NIRDALevel0HDUList, "nirda-level0.fits"),
+        (VISDALevel0HDUList, "visda-level0.fits"),
+        (VISDAFFILevel0HDUList, "visda-ffi-level0.fits"),
+    ],
+)
+def test_create_dummy_data(hdulist_class, filename, tmp_path):
     level = logger.level
     logger.setLevel("ERROR")
-    NIRDALevel0HDUList().writeto(
-        f"{TESTDIR}dummyfiles/nirda-level0.fits", overwrite=True
-    )
+    path = tmp_path / filename
+    hdulist_class().writeto(str(path), overwrite=True)
     logger.setLevel(level)
-
-
-def test_create_dummy_data_V0():
-    level = logger.level
-    logger.setLevel("ERROR")
-    VISDALevel0HDUList().writeto(
-        f"{TESTDIR}dummyfiles/visda-level0.fits", overwrite=True
-    )
-    logger.setLevel(level)
-
-
-def test_create_dummy_data_V1():
-    level = logger.level
-    logger.setLevel("ERROR")
-    VISDAFFILevel0HDUList().writeto(
-        f"{TESTDIR}dummyfiles/visda-level1.fits", overwrite=True
-    )
-    logger.setLevel(level)
+    assert path.is_file()

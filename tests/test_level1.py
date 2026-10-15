@@ -39,11 +39,12 @@ def test_bias_subtraction_vissci():
         / "tiny_vissci.fits"
     )
     hdulist = pf.open(fname)
-    k = ~hdulist.border
-    med = np.median(hdulist["SCIENCE"].data[k])
+    # Pixels inside the ROI panels, excluding the border between panels.
+    in_roi = ~hdulist.border_mask
+    med = np.median(hdulist["SCIENCE"].data[:, in_roi])
     assert np.isclose(med, 112 * hdulist.frmpcoad, atol=20 * hdulist.frmpcoad)
     hdulist._subtract_bias()
 
-    med = np.median(hdulist["SCIENCE"].data[k])
+    med = np.median(hdulist["SCIENCE"].data[:, in_roi])
     assert np.isclose(med, 0, atol=20 * hdulist.frmpcoad)
     logger.setLevel(level)
