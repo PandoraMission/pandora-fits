@@ -75,8 +75,9 @@ def panels_to_cube(ROI_panels, nROI, ROI_size):
     nims = int(shape[1] / (width + ex))
     d1 = np.asarray(np.array_split(d, nims, axis=2))
     nims = int(shape[0] / (width + ex))
+    # Each split block is an ROI followed by `ex` border pixels; keep the ROI.
     d2 = np.asarray(np.array_split(d1, nims, axis=2))[
-        :, :, :, :-ex, :-ex
+        :, :, :, : ROI_size[0], : ROI_size[1]
     ].transpose([2, 0, 1, 3, 4])
     if dim == 2:
         return d2[0]

@@ -40,16 +40,17 @@ class ProcessingMixins:
         return value
 
     def _apply_detector_image(self, name, func):
-        if "COMMENT" not in self[0].header:
-            self[0].header["COMMENT"] = ""
-        if f"Subtracted {name}." in self[0].header["COMMENT"]:
+        # The COMMENT card records each applied reference image, so a step
+        # is never applied twice to the same data.
+        applied_comment = f"Applied {name}."
+        if applied_comment in self[0].header.get("COMMENT", []):
             logger.warning(
-                f"Attempted {name} application a second time. Ignoring {name} subtraction."
+                f"Attempted {name} application a second time. Ignoring {name} application."
             )
             return
         value = self._get_reference_detector_image(name)
         self["SCIENCE"].data = func(self["SCIENCE"].data, value)
-        self[0].header["COMMENT"] = f"Applied {name}."
+        self[0].header["COMMENT"] = applied_comment
 
     def _cast_to_float(self):
         logger.info("Casting data to float.")
@@ -124,7 +125,7 @@ class ProcessingMixins:
         if "VECTORS" in self:
             dy = self.row - np.nanmedian(self["VECTORS"].data["posy"])
         else:
-            dy = self.row - np.ones(self[0].header["POSY"])
+            dy = self.row - self[0].header["POSY"]
         wav = self.reference.get_wavelength_from_position(dy)
         sens = self.reference.get_spectrum_normalization_per_pixel(dy)
         tab = Table(
