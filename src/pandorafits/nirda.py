@@ -57,15 +57,32 @@ def get_nirda_read_frame_indexes(hdr):
     return np.asarray(times)
 
 
-def get_nirda_acqd_ints(hdr0):
-    if hdr0["FRMSACQ"] != hdr0["FRMSEXP"]:
-        idxs = get_nirda_read_frame_indexes(hdr0)
-        idxs = idxs.reshape((hdr0["INTEGRTS"], hdr0["GRPS"], hdr0["READS"]))
-        acqd_reads = idxs < (hdr0["FRMSACQ"] - 1)
-        acqd_ints = np.where(acqd_reads.all(axis=(1, 2)))[0][-1]
-    else:
-        acqd_ints = hdr0["INTEGRTS"]
-    return acqd_ints
+def get_nirda_acqd_ints(hdr0, nframes=None):
+    """Number of complete integrations in a NIRDA file.
+
+    Parameters
+    ----------
+    hdr0 : astropy.io.fits.Header
+        Primary header.
+    nframes : int, optional
+        Number of frames in the SCIENCE data: one per group when groups are
+        averaged onboard (``GRPSAVGD = 1``), otherwise one per read. The
+        header can count more acquired reads (``FRMSACQ``) than the data
+        hold, so the result is capped by the data when this is given.
+
+    Returns
+    -------
+    int
+        Number of complete integrations, at most ``INTEGRTS``.
+    """
+    reads_per_integration = hdr0["GRPS"] * hdr0["READS"]
+    acqd_ints = min(hdr0["INTEGRTS"], hdr0["FRMSACQ"] // reads_per_integration)
+    if nframes is not None:
+        frames_per_integration = (
+            hdr0["GRPS"] if hdr0["GRPSAVGD"] == 1 else reads_per_integration
+        )
+        acqd_ints = min(acqd_ints, nframes // frames_per_integration)
+    return int(acqd_ints)
 
 
 def get_nirda_ramp_times(hdr):
@@ -133,15 +150,21 @@ class NIRDALevel0HDUList(PandoraHDUList):
         if self.fixed:
             return self
         hdr = self[0].header
-        acqd_ints = get_nirda_acqd_ints(hdr)
+        acqd_ints = get_nirda_acqd_ints(hdr, self["SCIENCE"].data.shape[0])
+        if acqd_ints == 0:
+            raise ValueError("NIRDA file holds no complete integration.")
         # Fix the number of integrations and read frames so that we only keep whole integrations
         if acqd_ints != hdr["INTEGRTS"]:
             hdr["INTEGRTS"] = acqd_ints
             hdr["FRMSEXP"] = acqd_ints * hdr["GRPS"] * hdr["READS"]
             hdr["FRMSACQ"] = acqd_ints * hdr["GRPS"] * hdr["READS"]
-            hdr["FRMSTOT"] = get_nirda_frame_indexes_tot(hdr)[
-                acqd_ints * hdr["GRPS"] * hdr["READS"] - 1
-            ]
+            # Frames up to and including the last kept read.
+            hdr["FRMSTOT"] = (
+                get_nirda_frame_indexes_tot(hdr)[
+                    acqd_ints * hdr["GRPS"] * hdr["READS"] - 1
+                ]
+                + 1
+            )
             if hdr["GRPSAVGD"] == 0:
                 idx = acqd_ints * hdr["GRPS"] * hdr["READS"]
             else:

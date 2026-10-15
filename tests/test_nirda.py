@@ -1,9 +1,10 @@
 # Third-party
 import numpy as np
+import pytest
 from astropy.io import fits
 
 # First-party/Local
-from pandorafits.nirda import NIRDALevel1HDUList
+from pandorafits.nirda import NIRDALevel1HDUList, get_nirda_acqd_ints
 
 
 def test_nirda_aperture_masks_pixels_not_rows():
@@ -30,3 +31,41 @@ def test_nirda_aperture_masks_pixels_not_rows():
     assert np.array_equal(hdulist.aperture, expected)
     # Every target row is kept, including the contaminated and flagged ones.
     assert np.array_equal(hdulist.aperture.any(axis=1), expected.any(axis=1))
+
+
+def nirda_header(integrations, frmsacq, groups_averaged=1):
+    return fits.Header(
+        [
+            ("INTEGRTS", integrations),
+            ("GRPS", 2),
+            ("READS", 4),
+            ("GRPSAVGD", groups_averaged),
+            ("FRMSEXP", integrations * 8),
+            ("FRMSACQ", frmsacq),
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    "integrations, frmsacq, nframes, groups_averaged, expected",
+    [
+        # Complete file.
+        (10, 80, 20, 1, 10),
+        (10, 80, 80, 0, 10),
+        # Truncated after 5 complete integrations (40 reads); the old code
+        # kept 3.
+        (10, 40, 10, 1, 5),
+        (10, 43, 11, 1, 5),
+        (10, 43, 43, 0, 5),
+        # FRMSACQ claims 246 integrations but the data hold 491 averaged
+        # groups (245 integrations), as in real files.
+        (349, 1971, 491, 1, 245),
+        # Without the data length only FRMSACQ is used.
+        (349, 1971, None, 1, 246),
+    ],
+)
+def test_nirda_complete_integrations(
+    integrations, frmsacq, nframes, groups_averaged, expected
+):
+    header = nirda_header(integrations, frmsacq, groups_averaged)
+    assert get_nirda_acqd_ints(header, nframes) == expected
