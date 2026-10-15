@@ -1,5 +1,10 @@
 """Submodule for working with file database."""
 
+# Standard library
+from pathlib import Path
+
+from .. import DATA_DIR
+
 # This strings ban files from being processed.
 # If a filename contains these strings it will be automatically skipped everywhere.
 BANSTRINGS = [
@@ -13,9 +18,30 @@ BANSTRINGS = [
     "2026-06",
     "2026-07-0",
     "2026-07-1",
+]
+# Files in folders whose names contain these strings are skipped too.
+BANFOLDERS = [
     "engineering_data",
     "staging",
 ]
+
+
+def is_banned(filename):
+    """Whether a file is skipped by `BANSTRINGS` or `BANFOLDERS`.
+
+    `BANSTRINGS` are matched against the file name. `BANFOLDERS` are matched
+    against the folder names below `DATA_DIR` (all folders of a path outside
+    it), so that a ban cannot match the data directory's own path.
+    """
+    path = Path(filename)
+    if any(ban in path.name for ban in BANSTRINGS):
+        return True
+    try:
+        folders = path.parent.relative_to(DATA_DIR).parts
+    except ValueError:
+        folders = path.parent.parts
+    return any(ban in folder for folder in folders for ban in BANFOLDERS)
+
 
 DPC_KEYS = {
     "filename": "TEXT PRIMARY KEY",

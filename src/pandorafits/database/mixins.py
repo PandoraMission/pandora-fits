@@ -14,7 +14,7 @@ from astropy.time import Time
 
 from .. import logger  # noqa
 from .. import LEVEL0_DIR, LEVEL1_DIR, LEVEL2_DIR, LEVEL3_DIR  # noqa
-from . import BANSTRINGS
+from . import is_banned
 
 
 def _process_time(time):
@@ -138,7 +138,7 @@ class DataBaseMixins:
 
     def check_filename_needs_processing(self, filename):
         fname = Path(filename).name
-        if np.any([ban in fname for ban in BANSTRINGS]):
+        if is_banned(filename):
             # Automatically skip
             return False
         self.cur.execute(

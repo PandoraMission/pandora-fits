@@ -15,7 +15,7 @@ from astropy.time import Time
 
 from .. import LEVEL0_DIR, LEVELE_DIR, __version__, logger
 from ..utils import get_dpc_hashkey
-from . import BANSTRINGS
+from . import is_banned
 from .engineering import EngineeringDataBase, PayloadDataBase
 from .mixins import DataBaseMixins
 
@@ -133,7 +133,7 @@ class LevelEDataBase(DataBaseMixins):
     def check_filename_needs_processing(self, filename, level=0):
         fname = os.path.basename(filename)
         fname = Path(filename).name
-        if np.any([ban in fname for ban in BANSTRINGS]):
+        if is_banned(filename):
             # Automatically skip
             return False
 

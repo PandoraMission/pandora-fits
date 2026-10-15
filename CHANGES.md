@@ -18,6 +18,7 @@ Notable changes to `pandorafits`, newest version first. Every change that affect
 ### Fixed
 
 - Database crawls on Windows: Level 0 entries stored the full path as the file name and an empty folder, so re-crawls failed and duplicate downloads were not skipped. Rebuild Level 0 databases made on Windows.
+- Files in `engineering_data` or `staging` folders are skipped by the crawls, as intended; banned folder names are now a separate list, `BANFOLDERS`, matched only against folders below `DATA_DIR`.
 - `writeto` writes fresh checksums by default and sets `NEXTEND`; the Level 2 `ASTROMETRY` header no longer repeats `EXTNAME` or carries stale checksums.
 - A calibration step (bias, dark, flat, ...) is not applied twice.
 - `SNRInspector` no longer crashes on an empty target aperture; an empty aperture is logged.
@@ -27,5 +28,5 @@ Notable changes to `pandorafits`, newest version first. Every change that affect
 ### Added
 
 - Demos: `demos/01_visda_reduction.ipynb`, `02_nirda_reduction.ipynb`, `03_visit_analysis.ipynb`.
-- `utils.wrap_deg`, `circular_mean_deg`, `circular_median_deg`, `CircularMeanAggregate`; `processing.get_scene_flux`, `DetectorSkyScene`; `PandoraHDUList.exposure_windows`; `nirda.get_nirda_read_mid_times`; `utils.split_path`, `unique_by_name`.
+- `utils.wrap_deg`, `circular_mean_deg`, `circular_median_deg`, `CircularMeanAggregate`; `processing.get_scene_flux`, `DetectorSkyScene`; `PandoraHDUList.exposure_windows`; `nirda.get_nirda_read_mid_times`; `utils.split_path`, `unique_by_name`; `database.BANFOLDERS`, `is_banned`.
 - Tests for the above; the dummy-file tests write to a temporary folder.
