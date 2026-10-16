@@ -22,7 +22,46 @@ __all__ = [
     "TimeOnTargetInspector",
     "DetectorTemperatureInspector",
     "SNRInspector",
+    "time_within_fraction",
 ]
+
+
+def time_within_fraction(jd, distance, threshold, total_minutes):
+    """Fraction of an observation that `distance` is below `threshold`.
+
+    Each cadence is weighted by the time until the next cadence, capped at
+    the median cadence spacing so that gaps from dropped frames count against
+    the fraction. The last cadence is given the median spacing. NaN distances
+    (e.g. no valid pointing) never count as within `threshold`.
+
+    Parameters
+    ----------
+    jd : np.ndarray
+        Cadence times [JD].
+    distance : np.ndarray
+        Distance at each cadence, in the same units as `threshold`.
+    threshold : float
+        Maximum distance to count a cadence as within.
+    total_minutes : float
+        Duration of the observation [minutes].
+
+    Returns
+    -------
+    float
+        Fraction between 0 and 1.
+    """
+    if (len(jd) == 0) or (total_minutes <= 0):
+        return 0.0
+    cadence_minutes = np.diff(jd) * (24 * 60)
+    typical_minutes = (
+        np.median(cadence_minutes) if len(cadence_minutes) else total_minutes
+    )
+    durations = np.append(
+        np.minimum(cadence_minutes, typical_minutes), typical_minutes
+    )
+    within_minutes = durations[distance < threshold].sum()
+    # The last cadence's assumed duration can overrun the file end time.
+    return float(min(within_minutes / total_minutes, 1.0))
 
 
 class Inspector(ABC):
@@ -95,24 +134,46 @@ class BackgroundInspector(Inspector):
 
 
 class PositionOnTargetInspector(Inspector):
-    """Scores how on target the file is"""
+    """Scores how on target the file is.
+
+    TCENT10/20/30 are the fraction of the observation that the target was
+    within 10/20/30 pixels of the subarray center, using the per-cadence
+    target position in the VECTORS extension. Cadences without valid VITL
+    pointing count as not centered.
+    """
 
     def calculate(self):
-        mid = np.asarray(
-            np.unravel_index(
-                np.argmin(
-                    np.hypot(
-                        self.hdulist.column[None, :]
-                        - self.hdulist[0].header["posx"],
-                        self.hdulist.row[:, None]
-                        - self.hdulist[0].header["posy"],
-                    )
+        vectors = self.hdulist["VECTORS"].data
+        # VECTORS fills posx/posy with the static WCS position when pointing
+        # is missing, so mask those cadences out.
+        has_pointing = (
+            np.isfinite(vectors["avg_ra"])
+            & np.isfinite(vectors["avg_dec"])
+            & np.isfinite(vectors["avg_rot"])
+        )
+        center_distance = np.where(
+            has_pointing,
+            np.hypot(
+                vectors["posx"] - self.hdulist.column.mean(),
+                vectors["posy"] - self.hdulist.row.mean(),
+            ),
+            np.nan,
+        )
+        file_minutes = (
+            (self.hdulist.end_time - self.hdulist.start_time)
+            .to(u.minute)
+            .value
+        )
+        centered_cards = [
+            fits.Card(
+                f"TCENT{threshold}",
+                time_within_fraction(
+                    vectors["jd"], center_distance, threshold, file_minutes
                 ),
-                (self.hdulist.row.shape[0], self.hdulist.column.shape[0]),
+                f"Fraction of time target within {threshold} px of center",
             )
-        ).astype(float)
-        mid[0] -= self.hdulist.row.shape[0] / 2
-        mid[1] -= self.hdulist.column.shape[0] / 2
+            for threshold in [10, 20, 30]
+        ]
 
         apcomp = np.nan_to_num(
             self.hdulist.aperture.sum()
@@ -124,16 +185,11 @@ class PositionOnTargetInspector(Inspector):
                 100 * apcomp,
                 "Aperture Completeness Metric 1",
             ),
-            fits.Card("TARGCENT", np.hypot(*mid) < 8, "Target Centered"),
+            *centered_cards,
             fits.Card(
                 "TARGCOMP",
-                (
-                    100
-                    * self.hdulist.aperture.sum()
-                    / (self.hdulist["APERTURE"].data & 2 == 2).sum()
-                )
-                > 0.7,
-                "Target Complete",
+                apcomp > 0.7,
+                "Over 70% of target aperture pixels usable",
             ),
         ]
 
