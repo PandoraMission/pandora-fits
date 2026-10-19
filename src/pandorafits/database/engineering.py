@@ -158,7 +158,7 @@ class EngineeringDataBase(DataBaseMixins):
         )
         paths = np.asarray([path for path in paths if "staging" not in path])
         path_idxs = np.unique(
-            [p.split("/")[-1] for p in paths[::-1]], return_index=True
+            [p.split("/")[-2] for p in paths[::-1]], return_index=True
         )[1]
         paths = np.sort(paths[::-1][path_idxs])
         with logging_redirect_tqdm():
@@ -244,7 +244,7 @@ class PayloadDataBase(EngineeringDataBase):
         )
         paths = np.asarray([path for path in paths if "staging" not in path])
         path_idxs = np.unique(
-            [p.split("/")[-1] for p in paths[::-1]], return_index=True
+            [p.split("/")[-2] for p in paths[::-1]], return_index=True
         )[1]
         paths = np.sort(paths[::-1][path_idxs])
         with logging_redirect_tqdm():
