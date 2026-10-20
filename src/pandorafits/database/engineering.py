@@ -156,11 +156,9 @@ class EngineeringDataBase(DataBaseMixins):
         paths = np.sort(
             [str(path) for path in Path(root).rglob("Analogs.json")]
         )
-        paths = np.asarray([path for path in paths if "staging" not in path])
-        path_idxs = np.unique(
-            [p.split("/")[-1] for p in paths[::-1]], return_index=True
-        )[1]
-        paths = np.sort(paths[::-1][path_idxs])
+        paths = np.sort(
+            np.asarray([path for path in paths if "staging" not in path])
+        )
         with logging_redirect_tqdm():
             for path in tqdm(paths, desc="Engineering files"):
                 if not self.check_if_completed(path):
@@ -242,11 +240,9 @@ class PayloadDataBase(EngineeringDataBase):
         paths = np.sort(
             [str(path) for path in Path(root).rglob("PayloadTelemetry.json")]
         )
-        paths = np.asarray([path for path in paths if "staging" not in path])
-        path_idxs = np.unique(
-            [p.split("/")[-1] for p in paths[::-1]], return_index=True
-        )[1]
-        paths = np.sort(paths[::-1][path_idxs])
+        paths = np.sort(
+            np.asarray([path for path in paths if "staging" not in path])
+        )
         with logging_redirect_tqdm():
             for path in tqdm(paths, desc="Payload files"):
                 if not self.check_if_completed(path):
