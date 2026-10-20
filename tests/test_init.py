@@ -24,3 +24,21 @@ def test_roundtrip():
         HDUList("test.fits")
     os.remove("test.fits")
     logger.setLevel(level)
+
+
+def test_time_metadata():
+    level = logger.level
+    logger.setLevel("ERROR")
+    for HDUList in [
+        NIRDALevel0HDUList,
+        VISDALevel0HDUList,
+        VISDAFFILevel0HDUList,
+    ]:
+        # Check generated headers before validation can fill missing cards.
+        hdulist = HDUList().to_level1(upcast=False)
+        assert hdulist["TIME"].header["FRAME"] == "JD"
+        assert hdulist["TIME"].header["TIMESYS"] == "UTC"
+        if HDUList is NIRDALevel0HDUList:
+            hdulist.difference_sample()
+            assert hdulist["TIME"].header["TIMESYS"] == "UTC"
+    logger.setLevel(level)

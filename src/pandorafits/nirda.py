@@ -112,7 +112,12 @@ class NIRDALevel0HDUList(PandoraHDUList):
             fits.ImageHDU(
                 time.jd,
                 name="TIME",
-                header=fits.Header([("FRAME", "JD", "Time frame is JD")]),
+                header=fits.Header(
+                    [
+                        ("FRAME", "JD", "Time frame is JD"),
+                        ("TIMESYS", "UTC", "Time scale"),
+                    ]
+                ),
             )
         )
         self.append(

@@ -22,6 +22,7 @@ def hdulist_to_dataframes(hdulist):
         "TELESCOP",
         "CAMERAID",
         "INSTRMNT",
+        "TIMESYS",
         "TFIELDS",
         "BSCALE",
         "BZERO",

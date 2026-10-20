@@ -24,6 +24,32 @@ Pandora will have the following levels of files for each detector
 | 2     | Calibrated image data products                               |
 | 3     | Spectral time-series data, ready for science.                |
 
+## Timestamp conventions
+
+L1 and L2 `TIME` extensions contain Julian Dates (`FRAME = 'JD'`) in UTC
+(`TIMESYS = 'UTC'`). Spacecraft counters are measured from
+2000-01-01 00:00:00 TAI and converted to UTC. `EXPTIME` extensions use seconds.
+
+- **VISDA science and FFI:** `TIME` is the frame start. Science frames contain
+  `FRMPCOAD` coadded reads; FFI frames contain one read. `EXPTIME` is the frame
+  duration, so the end is `TIME + EXPTIME / 86400` when using the stored arrays.
+  The VISDA primary-header `EXPTIME` instead gives the read duration in
+  microseconds.
+- **NIRDA L1:** `TIME` follows the detector-read sequence, including reset and
+  dropped-frame intervals. `EXPTIME` is cumulative ramp exposure through each
+  read, not a duration starting at its `TIME`. For onboard-averaged groups,
+  `TIME` uses the first read's timestamp and `EXPTIME` is averaged over the reads.
+- **NIRDA L2:** Adjacent reads (or groups) are differenced. Each product retains
+  the later L1 read/group's `TIME`; its `EXPTIME` is the difference between the
+  corresponding cumulative L1 exposures. This mapping does not establish that
+  L2 `TIME` is the physical exposure start or that `TIME + EXPTIME / 86400`
+  gives its end.
+
+Older files may lack `TIMESYS`. Constructor validation with the default
+`warn=True` adds the required UTC card in memory; strict validation
+(`warn=False`) rejects a missing card. Older package versions may reject the new
+card under strict validation.
+
 ## Exceptions
 
 `pandora-fits` will throw exceptions if files are not in the correct format. This includes
