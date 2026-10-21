@@ -46,7 +46,11 @@ def get_engineering_entry(filename):
             df.drop("primaryKey", axis="columns", inplace=True)
             df.set_index("JD", inplace=True)
             dfs.append(df)
-        df = pd.concat(dfs, axis=1)
+        df = pd.concat(
+            [df.loc[~df.index.duplicated(keep="first"), :] for df in dfs],
+            axis=1,
+        )
+        # df = pd.concat(dfs, axis=1)
         df = df.reset_index()
         df.drop_duplicates("JD", keep="first", inplace=True)
         return [i[1].values for i in df.iterrows()]
@@ -56,6 +60,8 @@ def get_payload_entry(filename):
     with warnings.catch_warnings(record=True) as w:  # noqa
         warnings.simplefilter("always")  # capture all warnings
         df = pd.read_json(filename)
+        if len(df) == 0:
+            return None
         df = df.map(
             lambda x: x["val"] if isinstance(x, dict) and "val" in x else x
         )
@@ -247,5 +253,6 @@ class PayloadDataBase(EngineeringDataBase):
             for path in tqdm(paths, desc="Payload files"):
                 if not self.check_if_completed(path):
                     rows = get_payload_entry(path)
-                    self.add_entries(rows)
+                    if rows is not None:
+                        self.add_entries(rows)
                     self.update_completed(path)
