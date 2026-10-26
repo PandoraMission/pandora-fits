@@ -76,6 +76,14 @@ def get_payload_entry(filename):
         df.set_index("JD", inplace=True)
         df = df.reset_index()
         df.drop_duplicates("JD", keep="first", inplace=True)
+        # clip out weird ints
+        k = (
+            (df.pldTcuErrorCode < 2**20)
+            & (df.pldPduErrorCode < 2**20)
+            & (df.pldPcoImgSequenceInProgress < 2**20)
+            & (df.pldH2rgImgSequenceInProgress < 2**20)
+        )
+        df = df[k]
         return [i[1].values for i in df.iterrows()]
 
 
