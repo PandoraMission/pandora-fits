@@ -436,7 +436,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
 
     @property
     def start_time(self):
-        """Given Pandora HDUList obtains the detector time in TAI."""
+        """Return UTC detector start time from counters with a TAI epoch."""
         return convert_time(
             self[0].header["CORSTIME"], self[0].header["FINETIME"]
         )
@@ -451,7 +451,7 @@ class PandoraHDUList(fits.HDUList, ProcessingMixins):
 
     @property
     def sequence_start_time(self):
-        """Given Pandora HDUList obtains the detector time in TAI."""
+        """Return SEQSTART as a Julian Date, or the detector start time."""
         if "SEQSTART" in self[0].header:
             return Time(self[0].header["SEQSTART"], format="jd")
         else:

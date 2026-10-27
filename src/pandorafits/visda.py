@@ -55,7 +55,12 @@ class VISDALevel0HDUList(ReportMixins, PandoraHDUList):
             fits.ImageHDU(
                 self.time.jd,
                 name="TIME",
-                header=fits.Header([("FRAME", "JD", "Time frame is JD")]),
+                header=fits.Header(
+                    [
+                        ("FRAME", "JD", "Time frame is JD"),
+                        ("TIMESYS", "UTC", "Time scale"),
+                    ]
+                ),
             )
         )
         self.append(
@@ -477,7 +482,12 @@ class VISDAFFILevel0HDUList(ReportMixins, PandoraHDUList):
             fits.ImageHDU(
                 self.time.jd,
                 name="TIME",
-                header=fits.Header([("FRAME", "JD", "Time frame is JD")]),
+                header=fits.Header(
+                    [
+                        ("FRAME", "JD", "Time frame is JD"),
+                        ("TIMESYS", "UTC", "Time scale"),
+                    ]
+                ),
             )
         )
         self.append(
