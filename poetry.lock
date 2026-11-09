@@ -5349,14 +5349,14 @@ sparse3d = ">=1.2.10"
 
 [[package]]
 name = "pandoraref"
-version = "2.9.1"
+version = "2.9.2"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main", "dev"]
 files = [
-    {file = "pandoraref-2.9.1-py3-none-any.whl", hash = "sha256:a1bcd19f200e2ac5f3d34ee18f09e97ac3653fc4d96ac6484705a59707c43a4a"},
-    {file = "pandoraref-2.9.1.tar.gz", hash = "sha256:d4129922f4bd7a2075559a5c40b2c476bf13870c6a60e8d9ec4c0f156f0a1a6d"},
+    {file = "pandoraref-2.9.2-py3-none-any.whl", hash = "sha256:7212ea9d3f56d3e1b446b3bdffea90bf93e8b5bd62f3a10d1dc3d1242f424a2f"},
+    {file = "pandoraref-2.9.2.tar.gz", hash = "sha256:0dd9a45cf4d3a8210f4a8179eefa2e15fceefe38d4c52c84d1df40158d7b3002"},
 ]
 
 [package.dependencies]
@@ -8332,4 +8332,4 @@ database = ["fitsio"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "ce659c6d7fef3092b0bd28256bb74161fc79a6ceefb0c8f87700f905d80d0524"
+content-hash = "cae436cd730661d22aaca63c5daf6e83630ef725a1756ee54de47bc12c48eb33"
